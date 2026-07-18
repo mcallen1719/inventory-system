@@ -1,0 +1,67 @@
+{
+  "printing_db_audit_logs": [
+    {
+      "id": "log-1784361341845-358",
+      "timestamp": "2026-07-18T07:55:41.845Z",
+      "user": "Isaah Boadu Jnr",
+      "action": "Login",
+      "module": "Security",
+      "details": "Successfully authenticated into Printopia Digital Press terminal. Session initialized."
+    },
+    {
+      "id": "log-1784361318288-413",
+      "timestamp": "2026-07-18T07:55:18.288Z",
+      "user": "Staff 1",
+      "action": "Logout",
+      "module": "Security",
+      "details": "Terminated terminal session."
+    },
+    {
+      "id": "log-1784361308454-216",
+      "timestamp": "2026-07-18T07:55:08.454Z",
+      "user": "Staff 1",
+      "action": "Login",
+      "module": "Security",
+      "details": "Successfully authenticated into Printopia Digital Press terminal. Session initialized."
+    }
+  ],
+  "printing_db_jobs": [],
+  "printing_db_notifications": [],
+  "printing_db_gpo": [],
+  "printing_db_expenditures": [],
+  "printing_db_miscellaneous": [],
+  "printing_db_sales_reports": [],
+  "printing_db_inventory": [],
+  "printing_db_settings": {
+    "companyName": "Printopia Digital Press",
+    "logoUrl": "/src/assets/images/printopia_logo_1783376948226.jpg",
+    "address": "",
+    "phone": "",
+    "email": "",
+    "vatRate": 0,
+    "receiptFooter": "Thank you for doing business with Printopia Digital Press! Please retain this receipt for returns.",
+    "invoiceFooter": "Thank you for choosing Printopia Digital Press. Payment is due upon receipt. For inquiries, email support@printopiadigitalpress.com or call +233 24 555 0192.",
+    "theme": "light",
+    "currency": "GHS",
+    "language": "en"
+  },
+  "printing_db_staff_accounts": [
+    {
+      "id": "staff-1",
+      "username": "staff1",
+      "name": "Staff 1",
+      "passwordText": "staff123",
+      "roleDescription": "Lead Designer & Printer"
+    },
+    {
+      "id": "staff-2",
+      "username": "staff2",
+      "name": "Staff 2",
+      "passwordText": "staff456",
+      "roleDescription": "Inventory & Delivery Officer"
+    }
+  ],
+  "printing_db_deadline_alerted": [],
+  "printing_db_staff_notes": [],
+  "printing_db_staff_attendance": []
+}

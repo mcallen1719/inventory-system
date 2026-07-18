@@ -1,0 +1,6 @@
+{
+  "name": "Printing Inventory & Job Management System",
+  "description": "An enterprise-grade, responsive Printing Company Inventory and Job Management System. Includes job intake, general printing forms, Kanban production tracking, receipts, waybills, and an admin dashboard with analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_REALTIME_SYNC", "MAJOR_CAPABILITY_OFFLINE_FIRST"]
+}
