@@ -208,13 +208,49 @@ const DEFAULT_SETTINGS: CompanySettings = {
   currency: "GHS",
   language: "en",
   syncServerUrl: "",
-  africasTalkingUsername: "",
-  africasTalkingApiKey: "",
-  africasTalkingSenderId: ""
+  africasTalkingUsername: "PRINTOPIA DIGITAL PRESS",
+  africasTalkingApiKey: "atsk_188f36219b750459f7dc78e1dfa0876c7c240923b90738986213e12a2fa521a66e2eba6c",
+  africasTalkingSenderId: "PRINTOPIA DIGITAL PRESS"
 };
 
 // Initial Seed Data for Inventory
-const SEED_INVENTORY: InventoryItem[] = [];
+const SEED_INVENTORY: InventoryItem[] = [
+  { id: "mat-1", item: "A4 Paper", category: "Paper", openingStock: 0, purchased: 0, used: 0, minimumStock: 100, alertLevel: 100, unitCost: 0.15, sellingPrice: 0.30, barcode: "8901001001002", qrCode: "QR-A4PAPER", supplier: "Paper Mill Ltd", remainingStock: 0 },
+  { id: "mat-2", item: "A3 Paper", category: "Paper", openingStock: 0, purchased: 0, used: 0, minimumStock: 50, alertLevel: 50, unitCost: 0.40, sellingPrice: 0.80, barcode: "8901001001003", qrCode: "QR-A3PAPER", supplier: "Paper Mill Ltd", remainingStock: 0 },
+  { id: "mat-3", item: "Photo Paper", category: "Paper", openingStock: 0, purchased: 0, used: 0, minimumStock: 30, alertLevel: 30, unitCost: 2.00, sellingPrice: 4.00, barcode: "8901001001004", qrCode: "QR-PHOTOPAPER", supplier: "Photo Supplies Co.", remainingStock: 0 },
+  { id: "mat-4", item: "Toner", category: "Ink", openingStock: 0, purchased: 0, used: 0, minimumStock: 5, alertLevel: 5, unitCost: 150.00, sellingPrice: 300.00, barcode: "8901001001005", qrCode: "QR-TONER", supplier: "Printer Parts Ghana", remainingStock: 0 },
+  { id: "mat-5", item: "PVC Cover", category: "Finishing", openingStock: 0, purchased: 0, used: 0, minimumStock: 20, alertLevel: 20, unitCost: 5.00, sellingPrice: 10.00, barcode: "8901001001006", qrCode: "QR-PVCCOVER", supplier: "Binding Supplies", remainingStock: 0 },
+  { id: "mat-6", item: "Hard Cover", category: "Finishing", openingStock: 0, purchased: 0, used: 0, minimumStock: 15, alertLevel: 15, unitCost: 8.00, sellingPrice: 15.00, barcode: "8901001001007", qrCode: "QR-HARDCOVER", supplier: "Binding Supplies", remainingStock: 0 },
+  { id: "mat-7", item: "Spiral Binder", category: "Finishing", openingStock: 0, purchased: 0, used: 0, minimumStock: 20, alertLevel: 20, unitCost: 3.00, sellingPrice: 6.00, barcode: "8901001001008", qrCode: "QR-SPIRAL", supplier: "Binding Supplies", remainingStock: 0 },
+  { id: "mat-8", item: "Staple Pins", category: "Office Supplies", openingStock: 0, purchased: 0, used: 0, minimumStock: 20, alertLevel: 20, unitCost: 5.00, sellingPrice: 10.00, barcode: "8901001001009", qrCode: "QR-STAPLES", supplier: "Stationery Hub", remainingStock: 0 },
+  { id: "mat-9", item: "Brown Envelope", category: "Office Supplies", openingStock: 0, purchased: 0, used: 0, minimumStock: 50, alertLevel: 50, unitCost: 0.50, sellingPrice: 1.00, barcode: "8901001001010", qrCode: "QR-ENVELOPE", supplier: "Stationery Hub", remainingStock: 0 },
+  { id: "mat-10", item: "3 Feet SAV", category: "Finishing", openingStock: 0, purchased: 0, used: 0, minimumStock: 10, alertLevel: 10, unitCost: 15.00, sellingPrice: 30.00, barcode: "8901001001011", qrCode: "QR-SAV3FT", supplier: "Vinyl & Flex Ltd", remainingStock: 0 },
+  { id: "mat-11", item: "4 Feet SAV", category: "Finishing", openingStock: 0, purchased: 0, used: 0, minimumStock: 10, alertLevel: 10, unitCost: 18.00, sellingPrice: 35.00, barcode: "8901001001012", qrCode: "QR-SAV4FT", supplier: "Vinyl & Flex Ltd", remainingStock: 0 },
+  { id: "mat-12", item: "5 Feet SAV", category: "Finishing", openingStock: 0, purchased: 0, used: 0, minimumStock: 10, alertLevel: 10, unitCost: 22.00, sellingPrice: 42.00, barcode: "8901001001013", qrCode: "QR-SAV5FT", supplier: "Vinyl & Flex Ltd", remainingStock: 0 },
+  { id: "mat-13", item: "6 Feet SAV", category: "Finishing", openingStock: 0, purchased: 0, used: 0, minimumStock: 10, alertLevel: 10, unitCost: 25.00, sellingPrice: 48.00, barcode: "8901001001014", qrCode: "QR-SAV6FT", supplier: "Vinyl & Flex Ltd", remainingStock: 0 },
+  { id: "mat-14", item: "3 Feet Flexy", category: "Finishing", openingStock: 0, purchased: 0, used: 0, minimumStock: 10, alertLevel: 10, unitCost: 12.00, sellingPrice: 25.00, barcode: "8901001001015", qrCode: "QR-FLEX3FT", supplier: "Vinyl & Flex Ltd", remainingStock: 0 },
+  { id: "mat-15", item: "4 Feet Flexy", category: "Finishing", openingStock: 0, purchased: 0, used: 0, minimumStock: 10, alertLevel: 10, unitCost: 15.00, sellingPrice: 30.00, barcode: "8901001001016", qrCode: "QR-FLEX4FT", supplier: "Vinyl & Flex Ltd", remainingStock: 0 },
+  { id: "mat-16", item: "5 Feet Flexy", category: "Finishing", openingStock: 0, purchased: 0, used: 0, minimumStock: 10, alertLevel: 10, unitCost: 18.00, sellingPrice: 35.00, barcode: "8901001001017", qrCode: "QR-FLEX5FT", supplier: "Vinyl & Flex Ltd", remainingStock: 0 },
+  { id: "mat-17", item: "6 Feet Flexy", category: "Finishing", openingStock: 0, purchased: 0, used: 0, minimumStock: 10, alertLevel: 10, unitCost: 20.00, sellingPrice: 38.00, barcode: "8901001001018", qrCode: "QR-FLEX6FT", supplier: "Vinyl & Flex Ltd", remainingStock: 0 },
+  { id: "mat-18", item: "DTF Ink", category: "DTF", openingStock: 0, purchased: 0, used: 0, minimumStock: 5, alertLevel: 5, unitCost: 200.00, sellingPrice: 400.00, barcode: "8901001001019", qrCode: "QR-DTFINK", supplier: "DTF Supplies Co.", remainingStock: 0 },
+  { id: "mat-19", item: "DTF Powder", category: "DTF", openingStock: 0, purchased: 0, used: 0, minimumStock: 5, alertLevel: 5, unitCost: 150.00, sellingPrice: 300.00, barcode: "8901001001020", qrCode: "QR-DTFPOWDER", supplier: "DTF Supplies Co.", remainingStock: 0 },
+  { id: "mat-20", item: "DTF Film", category: "DTF", openingStock: 0, purchased: 0, used: 0, minimumStock: 10, alertLevel: 10, unitCost: 8.00, sellingPrice: 15.00, barcode: "8901001001021", qrCode: "QR-DTFFILM", supplier: "DTF Supplies Co.", remainingStock: 0 },
+  { id: "mat-21", item: "Eco-solvent Ink", category: "Ink", openingStock: 0, purchased: 0, used: 0, minimumStock: 5, alertLevel: 5, unitCost: 180.00, sellingPrice: 360.00, barcode: "8901001001022", qrCode: "QR-ECOSOLVENT", supplier: "Ink World Ltd", remainingStock: 0 },
+  { id: "mat-22", item: "A3 Frame Board", category: "Printing Materials", openingStock: 0, purchased: 0, used: 0, minimumStock: 10, alertLevel: 10, unitCost: 25.00, sellingPrice: 50.00, barcode: "8901001001023", qrCode: "QR-A3BOARD", supplier: "Frame Mart", remainingStock: 0 },
+  { id: "mat-23", item: "A4 Frame Board", category: "Printing Materials", openingStock: 0, purchased: 0, used: 0, minimumStock: 15, alertLevel: 15, unitCost: 20.00, sellingPrice: 40.00, barcode: "8901001001024", qrCode: "QR-A4BOARD", supplier: "Frame Mart", remainingStock: 0 },
+  { id: "mat-24", item: "A5 Frame Board", category: "Printing Materials", openingStock: 0, purchased: 0, used: 0, minimumStock: 15, alertLevel: 15, unitCost: 15.00, sellingPrice: 30.00, barcode: "8901001001025", qrCode: "QR-A5BOARD", supplier: "Frame Mart", remainingStock: 0 },
+  { id: "mat-25", item: "12 x 16 Frame", category: "Other", openingStock: 0, purchased: 0, used: 0, minimumStock: 0, alertLevel: 0, unitCost: 0, sellingPrice: 0, barcode: "8901001001026", qrCode: "QR-1216", supplier: "Frame Mart", remainingStock: 0 },
+  { id: "mat-26", item: "12 x 19 Frame", category: "Other", openingStock: 0, purchased: 0, used: 0, minimumStock: 0, alertLevel: 0, unitCost: 0, sellingPrice: 0, barcode: "8901001001027", qrCode: "QR-1219", supplier: "Frame Mart", remainingStock: 0 },
+  { id: "mat-27", item: "16 x 20 Frame", category: "Other", openingStock: 0, purchased: 0, used: 0, minimumStock: 0, alertLevel: 0, unitCost: 0, sellingPrice: 0, barcode: "8901001001028", qrCode: "QR-1620", supplier: "Frame Mart", remainingStock: 0 },
+  { id: "mat-28", item: "20 x 24 Frame", category: "Other", openingStock: 0, purchased: 0, used: 0, minimumStock: 0, alertLevel: 0, unitCost: 0, sellingPrice: 0, barcode: "8901001001029", qrCode: "QR-2024", supplier: "Frame Mart", remainingStock: 0 },
+  { id: "mat-29", item: "24 x 30 Frame", category: "Other", openingStock: 0, purchased: 0, used: 0, minimumStock: 0, alertLevel: 0, unitCost: 0, sellingPrice: 0, barcode: "8901001001030", qrCode: "QR-2430", supplier: "Frame Mart", remainingStock: 0 },
+  { id: "mat-30", item: "30 x 36 Frame", category: "Other", openingStock: 0, purchased: 0, used: 0, minimumStock: 0, alertLevel: 0, unitCost: 0, sellingPrice: 0, barcode: "8901001001031", qrCode: "QR-3036", supplier: "Frame Mart", remainingStock: 0 },
+  { id: "mat-31", item: "Frame Ring", category: "Finishing", openingStock: 0, purchased: 0, used: 0, minimumStock: 10, alertLevel: 10, unitCost: 2.00, sellingPrice: 4.00, barcode: "8901001001032", qrCode: "QR-FRAMERING", supplier: "Frame Mart", remainingStock: 0 },
+  { id: "mat-32", item: "2-sided Tape", category: "Finishing", openingStock: 0, purchased: 0, used: 0, minimumStock: 10, alertLevel: 10, unitCost: 15.00, sellingPrice: 30.00, barcode: "8901001001033", qrCode: "QR-2SIDETAPE", supplier: "Tape House Ghana", remainingStock: 0 },
+  { id: "mat-33", item: "Heat Tape", category: "Finishing", openingStock: 0, purchased: 0, used: 0, minimumStock: 10, alertLevel: 10, unitCost: 20.00, sellingPrice: 40.00, barcode: "8901001001034", qrCode: "QR-HEATTAPE", supplier: "Tape House Ghana", remainingStock: 0 },
+  { id: "mat-34", item: "Sublimation Ink", category: "Ink", openingStock: 0, purchased: 0, used: 0, minimumStock: 5, alertLevel: 5, unitCost: 120.00, sellingPrice: 240.00, barcode: "8901001001035", qrCode: "QR-SUBINK", supplier: "Ink World Ltd", remainingStock: 0 },
+  { id: "mat-35", item: "Sublimation Paper", category: "Paper", openingStock: 0, purchased: 0, used: 0, minimumStock: 30, alertLevel: 30, unitCost: 1.00, sellingPrice: 2.00, barcode: "8901001001036", qrCode: "QR-SUBPAPER", supplier: "Paper Mill Ltd", remainingStock: 0 }
+];
 
 // Seed Jobs
 const SEED_JOBS: Job[] = [];
@@ -467,7 +503,12 @@ export const DBStore = {
 
   // Inventory
   getInventory(): InventoryItem[] {
-    return getStored<InventoryItem[]>(KEYS.INVENTORY, SEED_INVENTORY);
+    const stored = getStored<InventoryItem[]>(KEYS.INVENTORY, SEED_INVENTORY);
+    if (!stored || stored.length === 0) {
+      setStored(KEYS.INVENTORY, SEED_INVENTORY);
+      return SEED_INVENTORY;
+    }
+    return stored;
   },
 
   updateInventoryItem(item: InventoryItem, user: string) {
@@ -514,6 +555,17 @@ export const DBStore = {
     }
 
     return newItem;
+  },
+
+  deleteInventoryItem(id: string, user: string): boolean {
+    const inventory = this.getInventory();
+    const item = inventory.find(i => i.id === id);
+    if (!item) return false;
+    const filtered = inventory.filter(i => i.id !== id);
+    setStored(KEYS.INVENTORY, filtered);
+    this.addAuditLog(user, "Delete", "Inventory", `Removed inventory item: ${item.item} from the catalog.`);
+    this.broadcastLiveActivity(user, "Delete", "Inventory", `Removed item ${item.item}`);
+    return true;
   },
 
   consumeInventoryByKeyword(keyword: string, qty: number) {
@@ -892,7 +944,13 @@ export const DBStore = {
   },
 
   getSmsContacts(): Contact[] {
-    return getStored<Contact[]>(KEYS.SMS_CONTACTS, []);
+    const stored = getStored<Contact[]>(KEYS.SMS_CONTACTS, []);
+    if (!stored || stored.length === 0) {
+      const seed = [{ id: "contact-seed-1", name: "Trial Contact", phone: "+233553882928" }];
+      setStored(KEYS.SMS_CONTACTS, seed);
+      return seed;
+    }
+    return stored;
   },
 
   saveSmsContacts(contacts: Contact[]) {

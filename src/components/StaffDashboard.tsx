@@ -42,7 +42,10 @@ import {
   Wallet,
   PackageSearch,
   ListChecks,
-  RefreshCw
+  RefreshCw,
+  Bell,
+  Pencil,
+  ShieldCheck
 } from "lucide-react";
 import { DBStore } from "../dbStore";
 import { Job, GeneralPrintingOrder, DailyMiscellaneous, CompanySettings, KanbanStage, JobStatus, InventoryItem, StaffNote } from "../types";
@@ -573,6 +576,10 @@ export default function StaffDashboard({
   const [invSalePrice, setInvSalePrice] = useState(0);
   const [invSupplierName, setInvSupplierName] = useState("");
   const [invRemark, setInvRemark] = useState("");
+
+  // Edit inventory item state
+  const [editInvId, setEditInvId] = useState<string | null>(null);
+  const [editInvItem, setEditInvItem] = useState<InventoryItem | null>(null);
 
   // Catalog Sku fields
   const [newSkuName, setNewSkuName] = useState("");
@@ -2209,6 +2216,31 @@ export default function StaffDashboard({
     alert("New SKU successfully cataloged and audited!");
   };
 
+  const handleStartEdit = (item: InventoryItem) => {
+    setEditInvId(item.id);
+    setEditInvItem({ ...item });
+  };
+
+  const handleEditInventoryItem = () => {
+    if (!editInvItem) return;
+    DBStore.updateInventoryItem(editInvItem, activeUserName);
+    setEditInvId(null);
+    setEditInvItem(null);
+    onRefreshGlobalState();
+    alert("Inventory item updated successfully!");
+  };
+
+  const handleDeleteInventoryItem = (item: InventoryItem) => {
+    if (!window.confirm(`Delete "${item.item}" from the catalog?\n\nThis cannot be undone. Only delete materials that are no longer used.`)) return;
+    DBStore.deleteInventoryItem(item.id, activeUserName);
+    if (editInvId === item.id) {
+      setEditInvId(null);
+      setEditInvItem(null);
+    }
+    onRefreshGlobalState();
+    alert(`"${item.item}" has been removed from the catalog.`);
+  };
+
   return (
     <div className="space-y-6">
       
@@ -3180,7 +3212,7 @@ export default function StaffDashboard({
               />
               {activeUserName && (
                 <span className="text-[9px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider mt-1.5 block">
-                  Locked to your active session: {activeUserName}
+                  Locked to your active session: {activeUserName} — Credentials managed by Admin only
                 </span>
               )}
             </div>
@@ -3819,7 +3851,68 @@ export default function StaffDashboard({
           ---------------------------------------------------- */}
       {activeTab === "inventory" && (
         <div className="space-y-6">
-          
+
+          {editInvItem && (
+            <div className="glass-panel rounded-2xl p-6 space-y-4 relative overflow-hidden paper-texture shadow-xl border border-blue-500/30">
+              <div className="cmyk-bar absolute top-0 left-0 right-0 h-[3px]" />
+              <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                <h3 className="text-sm font-black text-gray-950 dark:text-white uppercase tracking-tight">Edit Material — {editInvItem.item}</h3>
+                <button onClick={() => { setEditInvId(null); setEditInvItem(null); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-white cursor-pointer"><X className="h-4 w-4" /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="block text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Item Name</label>
+                  <input type="text" value={editInvItem.item} onChange={(e) => setEditInvItem({ ...editInvItem, item: e.target.value })} className="w-full glass-input rounded-lg px-2 py-1.5 text-gray-900 dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Category</label>
+                  <select value={editInvItem.category} onChange={(e) => setEditInvItem({ ...editInvItem, category: e.target.value as InventoryItem["category"] })} className="w-full glass-input rounded-lg px-2 py-1.5 text-gray-900 dark:text-white">
+                    <option value="Printing Materials">Printing Materials</option>
+                    <option value="Office Supplies">Office Supplies</option>
+                    <option value="Paper">Paper</option>
+                    <option value="Ink">Ink</option>
+                    <option value="DTF">DTF Material</option>
+                    <option value="Apparel">Apparel Blanks</option>
+                    <option value="Finishing">Finishing / Vinyl</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Opening Stock</label>
+                  <input type="number" value={editInvItem.openingStock} onChange={(e) => setEditInvItem({ ...editInvItem, openingStock: Math.max(0, parseInt(e.target.value) || 0) })} className="w-full glass-input rounded-lg px-2 py-1.5 text-gray-900 dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Purchased</label>
+                  <input type="number" value={editInvItem.purchased} onChange={(e) => setEditInvItem({ ...editInvItem, purchased: Math.max(0, parseInt(e.target.value) || 0) })} className="w-full glass-input rounded-lg px-2 py-1.5 text-gray-900 dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Used</label>
+                  <input type="number" value={editInvItem.used} onChange={(e) => setEditInvItem({ ...editInvItem, used: Math.max(0, parseInt(e.target.value) || 0) })} className="w-full glass-input rounded-lg px-2 py-1.5 text-gray-900 dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Min Alert</label>
+                  <input type="number" value={editInvItem.minimumStock} onChange={(e) => setEditInvItem({ ...editInvItem, minimumStock: Math.max(0, parseInt(e.target.value) || 0) })} className="w-full glass-input rounded-lg px-2 py-1.5 text-gray-900 dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Cost ({currency})</label>
+                  <input type="number" value={editInvItem.unitCost} onChange={(e) => setEditInvItem({ ...editInvItem, unitCost: Math.max(0, parseFloat(e.target.value) || 0) })} className="w-full glass-input rounded-lg px-2 py-1.5 text-gray-900 dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Sell ({currency})</label>
+                  <input type="number" value={editInvItem.sellingPrice} onChange={(e) => setEditInvItem({ ...editInvItem, sellingPrice: Math.max(0, parseFloat(e.target.value) || 0) })} className="w-full glass-input rounded-lg px-2 py-1.5 text-gray-900 dark:text-white" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Supplier</label>
+                <input type="text" value={editInvItem.supplier} onChange={(e) => setEditInvItem({ ...editInvItem, supplier: e.target.value })} className="w-full glass-input rounded-lg px-2 py-1.5 text-gray-900 dark:text-white" />
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <button onClick={handleEditInventoryItem} className="inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black px-4 py-2 rounded-lg cursor-pointer shadow-md shadow-blue-600/10 active:scale-95 transition"><Check className="h-3 w-3" /> Save Changes</button>
+                <button onClick={() => { setEditInvId(null); setEditInvItem(null); }} className="inline-flex items-center gap-1 bg-gray-500 hover:bg-gray-400 text-white text-[10px] font-black px-4 py-2 rounded-lg cursor-pointer active:scale-95 transition"><X className="h-3 w-3" /> Cancel</button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             {/* Left Column: Log Material Process Action (Span 1) */}
@@ -4195,10 +4288,46 @@ export default function StaffDashboard({
                             </div>
                           </div>
 
+                          {/* Value of materials left */}
+                          <div className="grid grid-cols-2 gap-2 text-[10px] pt-2 mt-2 border-t border-white/5 font-bold uppercase tracking-widest font-mono">
+                            <div className="rounded-lg bg-amber-500/5 border border-amber-500/10 p-2">
+                              <span className="block text-[8px] text-amber-600 dark:text-amber-400 font-sans font-black tracking-widest">Value Left (Cost)</span>
+                              <span className="text-amber-600 dark:text-amber-400 font-black">{currency} {(item.remainingStock * item.unitCost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="rounded-lg bg-blue-500/5 border border-blue-500/10 p-2">
+                              <span className="block text-[8px] text-blue-600 dark:text-blue-400 font-sans font-black tracking-widest">Value Left (Sell)</span>
+                              <span className="text-blue-600 dark:text-blue-400 font-black">{currency} {(item.remainingStock * item.sellingPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 pt-3 mt-3 border-t border-white/5">
+                            <button
+                              onClick={() => handleStartEdit(item)}
+                              className="inline-flex items-center gap-1 border border-white/10 dark:border-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-white/10 dark:hover:bg-zinc-800 text-[10px] font-black px-3 py-1.5 rounded-lg backdrop-blur-md cursor-pointer transition"
+                            >
+                              <Pencil className="h-3 w-3 text-blue-500" />
+                              Edit Material
+                            </button>
+                            <button
+                              onClick={() => handleDeleteInventoryItem(item)}
+                              className="inline-flex items-center gap-1 border border-rose-500/20 text-rose-500 hover:bg-rose-500/10 dark:hover:bg-rose-950/30 text-[10px] font-black px-3 py-1.5 rounded-lg backdrop-blur-md cursor-pointer transition"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              Remove
+                            </button>
+                          </div>
+
                         </div>
                       );
                     })}
-                </div>
+                    {inventoryList.filter(i => i.item.toLowerCase().includes(invSearch.toLowerCase()) || i.category.toLowerCase().includes(invSearch.toLowerCase())).length === 0 && (
+                      <div className="text-center py-10 px-4 rounded-xl border border-dashed border-white/15 bg-white/5">
+                        <PackageSearch className="h-10 w-10 text-gray-400 mx-auto mb-3" />
+                        <p className="text-sm font-black text-gray-600 dark:text-zinc-300">No materials in the catalog yet</p>
+                        <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1 max-w-xs mx-auto">Use the <span className="font-bold">Catalog New Material SKU</span> panel on the left to add your first material. It will appear here with its stock count and value.</p>
+                      </div>
+                    )}
+                 </div>
               </div>
 
             </div>
@@ -4744,7 +4873,7 @@ export default function StaffDashboard({
                     </select>
                     {activeUserName && (
                       <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold mt-1 block">
-                        Locked to your logged-in active session: {activeUserName}
+                        Locked to your logged-in active session: {activeUserName} — Credentials managed by Admin only
                       </span>
                     )}
                   </div>

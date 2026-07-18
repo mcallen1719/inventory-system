@@ -2146,6 +2146,17 @@ export default function AdminDashboard({
     alert(`Successfully registered purchase order of ${addQty} units for ${item.item}.`);
   };
 
+  const handleDeleteInventoryItem = (item: InventoryItem) => {
+    if (!window.confirm(`Delete "${item.item}" from the catalog?\n\nThis cannot be undone. Only delete materials that are no longer used.`)) return;
+    DBStore.deleteInventoryItem(item.id, "Admin");
+    if (editInvId === item.id) {
+      setEditInvId(null);
+      setAddQty(0);
+    }
+    onRefreshGlobalState();
+    alert(`"${item.item}" has been removed from the catalog.`);
+  };
+
 
   // ----------------------------------------------------
   // STATE FOR EOD APPROVAL DECK
@@ -2348,15 +2359,23 @@ export default function AdminDashboard({
     return DBStore.getAllCustomerPhoneNumbers();
   }, [smsContacts, refreshTrigger]);
 
+  const formatPhoneNumber = (raw: string): string => {
+    const trimmed = raw.trim();
+    if (!trimmed) return trimmed;
+    if (trimmed.startsWith('+')) return trimmed;
+    if (trimmed.startsWith('233')) return `+${trimmed}`;
+    return `+233${trimmed.replace(/^0+/, '')}`;
+  };
+
   const handleAddContact = () => {
     if (!newContactName.trim() || !newContactPhone.trim()) {
       alert("Please enter both name and phone number.");
       return;
     }
-    const contact: Contact = {
+    const contact = {
       id: `contact-${Date.now()}`,
       name: newContactName.trim(),
-      phone: newContactPhone.trim()
+      phone: formatPhoneNumber(newContactPhone)
     };
     const updated = [...smsContacts, contact];
     setSmsContacts(updated);
@@ -2381,9 +2400,9 @@ export default function AdminDashboard({
       alert("Please enter both name and phone number.");
       return;
     }
-    const updated = smsContacts.map(c => 
-      c.id === editingContactId 
-        ? { ...c, name: editingContactName.trim(), phone: editingContactPhone.trim() }
+    const updated = smsContacts.map(c =>
+      c.id === editingContactId
+        ? { ...c, name: editingContactName.trim(), phone: formatPhoneNumber(editingContactPhone) }
         : c
     );
     setSmsContacts(updated);
@@ -2445,15 +2464,28 @@ export default function AdminDashboard({
       });
 
       const result = await response.text();
-      
-      DBStore.addAuditLog("Admin", "Broadcast", "SMS", `Sent broadcast message to ${broadcastRecipients.length} recipients via Africa's Talking: "${broadcastMessage.substring(0, 80)}${broadcastMessage.length > 80 ? '...' : ''}". Response: ${result.substring(0, 100)}`);
-      
+      console.log("SMS broadcast raw response:", result);
+
+      DBStore.addAuditLog("Admin", "Broadcast", "SMS", `Sent broadcast message to ${broadcastRecipients.length} recipients via Africa's Talking: "${broadcastMessage.substring(0, 80)}${broadcastMessage.length > 80 ? '...' : ''}". Response: ${result.substring(0, 200)}`);
+
       setBroadcastSent(true);
       setBroadcastMessage("");
       onRefreshGlobalState();
       setTimeout(() => setBroadcastSent(false), 5000);
+
+      if (!response.ok) {
+        alert(`SMS send returned an error (HTTP ${response.status}).\n\nServer response: ${result.substring(0, 300)}`);
+        return;
+      }
+
+      if (result.toLowerCase().includes('error') || result.toLowerCase().includes('invalid') || result.toLowerCase().includes('failed')) {
+        alert(`Africa's Talking returned an error:\n\n${result.substring(0, 500)}`);
+        return;
+      }
+
+      alert(`Broadcast sent to ${broadcastRecipients.length} recipients.\n\nServer response: ${result.substring(0, 200)}`);
     } catch (error) {
-      alert("Failed to send broadcast. Check your Africa's Talking credentials and try again.");
+      alert("Failed to send broadcast. Check your sync server and Africa's Talking credentials.");
       console.error("Broadcast error:", error);
     }
   };
@@ -3981,6 +4013,7 @@ export default function AdminDashboard({
                     <th className="py-3.5 px-4 text-center">Remaining Stock</th>
                     <th className="py-3.5 px-4 text-right">Cost Price</th>
                     <th className="py-3.5 px-4 text-right">Selling Price</th>
+                    <th className="py-3.5 px-4 text-right">Value Left</th>
                     <th className="py-3.5 px-4 text-right w-36 rounded-r-xl">Purchase Action</th>
                   </tr>
                 </thead>
@@ -4010,6 +4043,10 @@ export default function AdminDashboard({
                         </td>
                         <td className="py-3.5 px-4 text-right font-mono font-bold">{currency} {item.unitCost.toFixed(2)}</td>
                         <td className="py-3 px-3.5 text-right font-semibold text-indigo-600 dark:text-indigo-400">{currency} {item.sellingPrice.toFixed(2)}</td>
+                        <td className="py-3 px-3.5 text-right font-mono">
+                          <div className="text-[9px] text-amber-600 dark:text-amber-400 font-black">{currency} {(item.remainingStock * item.unitCost).toFixed(2)}</div>
+                          <div className="text-[9px] text-blue-600 dark:text-blue-400 font-black">{currency} {(item.remainingStock * item.sellingPrice).toFixed(2)}</div>
+                        </td>
                         <td className="py-3 px-3.5 text-right">
                           {editInvId === item.id ? (
                             <div className="flex items-center justify-end gap-1.5">
@@ -4028,13 +4065,22 @@ export default function AdminDashboard({
                               </button>
                             </div>
                           ) : (
-                            <button
-                              onClick={() => { setEditInvId(item.id); setAddQty(0); }}
-                              className="inline-flex items-center gap-1.5 border border-white/10 dark:border-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-white/10 dark:hover:bg-zinc-800 text-[10px] font-black px-3 py-1.5 rounded-lg backdrop-blur-md cursor-pointer transition"
-                            >
-                              <PlusCircle className="h-3.5 w-3.5 text-blue-500" />
-                              Order Restock
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => { setEditInvId(item.id); setAddQty(0); }}
+                                className="inline-flex items-center gap-1.5 border border-white/10 dark:border-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-white/10 dark:hover:bg-zinc-800 text-[10px] font-black px-3 py-1.5 rounded-lg backdrop-blur-md cursor-pointer transition"
+                              >
+                                <PlusCircle className="h-3.5 w-3.5 text-blue-500" />
+                                Order Restock
+                              </button>
+                              <button
+                                onClick={() => handleDeleteInventoryItem(item)}
+                                className="inline-flex items-center gap-1.5 border border-rose-500/20 text-rose-500 hover:bg-rose-500/10 dark:hover:bg-rose-950/30 text-[10px] font-black px-2 py-1.5 rounded-lg backdrop-blur-md cursor-pointer transition"
+                                title="Remove item"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -4873,7 +4919,8 @@ export default function AdminDashboard({
                         type="text"
                         value={newContactPhone}
                         onChange={(e) => setNewContactPhone(e.target.value)}
-                        placeholder="e.g. 0201234567"
+                        onBlur={(e) => setNewContactPhone(formatPhoneNumber(e.target.value))}
+                        placeholder="e.g. 0201234567 or +233241234567"
                         className="w-full glass-input rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white font-semibold"
                       />
                     </div>
@@ -4910,6 +4957,7 @@ export default function AdminDashboard({
                                 type="text"
                                 value={editingContactPhone}
                                 onChange={(e) => setEditingContactPhone(e.target.value)}
+                                onBlur={(e) => setEditingContactPhone(formatPhoneNumber(e.target.value))}
                                 className="glass-input rounded px-2 py-1 text-xs"
                               />
                             </div>

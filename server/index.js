@@ -80,9 +80,17 @@ app.post('/api/sms/send', async (req, res) => {
     }
 
     const recipients = Array.isArray(to) ? to : [to];
+    const formattedNumbers = recipients.map(num => {
+      const trimmed = String(num).trim();
+      if (!trimmed) return trimmed;
+      if (trimmed.startsWith('+')) return trimmed;
+      if (trimmed.startsWith('233')) return `+${trimmed}`;
+      return `+233${trimmed.replace(/^0+/, '')}`;
+    }).filter(Boolean);
+
     const formData = new URLSearchParams();
     formData.append('username', username);
-    formData.append('to', recipients.join(','));
+    formData.append('to', formattedNumbers.join(','));
     formData.append('message', message);
     if (senderId) {
       formData.append('senderId', senderId);
@@ -98,6 +106,7 @@ app.post('/api/sms/send', async (req, res) => {
     });
 
     const text = await response.text();
+    console.log('Africa Talking raw response:', text);
     res.setHeader('Content-Type', 'text/plain');
     res.send(text);
   } catch (error) {
