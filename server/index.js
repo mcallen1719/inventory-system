@@ -88,13 +88,22 @@ app.post('/api/sms/send', async (req, res) => {
       return `+233${trimmed.replace(/^0+/, '')}`;
     }).filter(Boolean);
 
-    const formData = new URLSearchParams();
-    formData.append('username', username);
-    formData.append('to', formattedNumbers.join(','));
-    formData.append('message', message);
-    if (senderId) {
-      formData.append('senderId', senderId);
+    const BATCH_SIZE = 50;
+    const batches = [];
+    for (let i = 0; i < formattedNumbers.length; i += BATCH_SIZE) {
+      batches.push(formattedNumbers.slice(i, i + BATCH_SIZE));
     }
+
+    const results = [];
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      const formData = new URLSearchParams();
+      formData.append('username', username);
+      formData.append('to', batch.join(','));
+      formData.append('message', message);
+      if (senderId) {
+        formData.append('senderId', senderId);
+      }
 
     const response = await fetch('https://api.africastalking.com/restless/send', {
       method: 'POST',
@@ -106,9 +115,30 @@ app.post('/api/sms/send', async (req, res) => {
     });
 
     const text = await response.text();
-    console.log('Africa Talking raw response:', text);
-    res.setHeader('Content-Type', 'text/plain');
-    res.send(text);
+    console.log(`Africa Talking batch ${i + 1}/${batches.length} raw response:`, text);
+
+    let parsed = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = { raw: text };
+    }
+
+    const batchResult = {
+      batch,
+      status: response.status,
+      raw: text,
+      parsed
+    };
+    results.push(batchResult);
+
+    if (!response.ok) {
+      console.error(`Batch ${i + 1} failed with status ${response.status}:`, text);
+    }
+  }
+
+  res.setHeader('Content-Type', 'application/json');
+  res.json({ success: true, totalRecipients: formattedNumbers.length, batches: results.length, results });
   } catch (error) {
     console.error('SMS send error:', error);
     res.status(500).json({ error: 'Failed to send SMS', details: error.message });

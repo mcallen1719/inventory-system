@@ -2463,27 +2463,50 @@ export default function AdminDashboard({
         })
       });
 
-      const result = await response.text();
-      console.log("SMS broadcast raw response:", result);
+      const result = await response.json();
+      console.log("SMS broadcast result:", result);
 
-      DBStore.addAuditLog("Admin", "Broadcast", "SMS", `Sent broadcast message to ${broadcastRecipients.length} recipients via Africa's Talking: "${broadcastMessage.substring(0, 80)}${broadcastMessage.length > 80 ? '...' : ''}". Response: ${result.substring(0, 200)}`);
+      DBStore.addAuditLog("Admin", "Broadcast", "SMS", `Sent broadcast message to ${broadcastRecipients.length} recipients via Africa's Talking. Result: ${JSON.stringify(result).substring(0, 300)}`);
 
       setBroadcastSent(true);
       setBroadcastMessage("");
       onRefreshGlobalState();
       setTimeout(() => setBroadcastSent(false), 5000);
 
-      if (!response.ok) {
-        alert(`SMS send returned an error (HTTP ${response.status}).\n\nServer response: ${result.substring(0, 300)}`);
+      if (!response.ok || !result.success) {
+        const errorMsg = result.error || result.raw || "Unknown error";
+        if (errorMsg.includes('not allowed') || errorMsg.includes('GET')) {
+          alert(`SMS endpoint not found on the server.\n\nThis means the server needs to be updated. Please redeploy on Render.\n\nError: ${errorMsg}`);
+        } else {
+          alert(`SMS broadcast failed.\n\nTotal: ${broadcastRecipients.length} recipients\nBatches: ${result.batches || 0}\n\nError: ${errorMsg.substring(0, 500)}`);
+        }
         return;
       }
 
-      if (result.toLowerCase().includes('error') || result.toLowerCase().includes('invalid') || result.toLowerCase().includes('failed')) {
-        alert(`Africa's Talking returned an error:\n\n${result.substring(0, 500)}`);
-        return;
+      let successCount = broadcastRecipients.length;
+      let failCount = 0;
+      const failedNumbers = [];
+
+      if (result.results && Array.isArray(result.results)) {
+        for (const batch of result.results) {
+          if (batch.parsed && batch.parsed.SMSMessageData && batch.parsed.SMSMessageData.Recipients) {
+            for (const r of batch.parsed.SMSMessageData.Recipients) {
+              if (r.status && r.status.toLowerCase() !== 'success') {
+                failCount++;
+                failedNumbers.push(`${r.number} (${r.status || 'unknown'})`);
+              }
+            }
+          }
+        }
       }
 
-      alert(`Broadcast sent to ${broadcastRecipients.length} recipients.\n\nServer response: ${result.substring(0, 200)}`);
+      successCount = broadcastRecipients.length - failCount;
+
+      if (failCount > 0) {
+        alert(`Broadcast completed with issues.\n\nTotal: ${broadcastRecipients.length}\nSent: ${successCount}\nFailed: ${failCount}\n\nFailed numbers:\n${failedNumbers.join('\n')}`);
+      } else {
+        alert(`Broadcast sent successfully to ${broadcastRecipients.length} recipients in ${result.batches} batch(es).`);
+      }
     } catch (error) {
       alert("Failed to send broadcast. Check your sync server and Africa's Talking credentials.");
       console.error("Broadcast error:", error);
