@@ -36,13 +36,6 @@ export default function DocumentViewer({
   // Toggle state to let the user switch view format dynamically
   const [activeFormat, setActiveFormat] = React.useState<"invoice" | "receipt" | "waybill" | "delivery_receipt">(type);
 
-  // Dispatch Rider Assignment
-  const isWorkDone = React.useMemo(() => {
-    return !data.jobNumber || data.status === "Ready" || data.status === "Delivered" || data.kanbanStage === "Completed" || data.kanbanStage === "Delivered";
-  }, [data.jobNumber, data.status, data.kanbanStage]);
-
-  const [dispatchRider, setDispatchRider] = React.useState(data.assignedStaff || data.dispatchRider || "");
-
   // Auto-generate helper date/number if needed
   const dateStr = data.date || new Date().toISOString().split("T")[0];
   const customerName = data.customerName || "Walk-In Customer";
@@ -424,22 +417,6 @@ export default function DocumentViewer({
           </div>
         </div>
 
-        {/* Dynamic Dispatch Rider Session Input - Only when work is completed */}
-        {isWorkDone && (
-          <div className="no-print bg-indigo-50/50 border-b border-gray-100 px-6 py-2.5 flex items-center gap-3">
-            <span className="text-xs font-bold text-indigo-700 flex items-center gap-1.5 shrink-0">
-              <Truck className="h-4 w-4" /> Dispatch Rider Name:
-            </span>
-            <input
-              type="text"
-              value={dispatchRider}
-              onChange={(e) => setDispatchRider(e.target.value)}
-              placeholder="Enter dispatch rider name for this receipt/waybill..."
-              className="flex-grow text-xs rounded-lg border border-gray-200 bg-white px-3 py-1.5 outline-none focus:border-indigo-500 transition shadow-inner"
-            />
-          </div>
-        )}
-
         {/* Scrollable Printable Container */}
         <div className="flex-grow p-8 overflow-y-auto max-h-[75vh]" ref={printRef}>
           {activeFormat === "invoice" && (
@@ -485,11 +462,6 @@ export default function DocumentViewer({
                     <p className="text-xs text-gray-500">
                       Expected Delivery: {data.expectedDeliveryDate || "Immediate"}
                     </p>
-                    {dispatchRider && (
-                      <p className="text-xs text-gray-600 font-bold mt-1">
-                        Rider: {dispatchRider}
-                      </p>
-                    )}
                   </div>
                 </div>
 
@@ -662,12 +634,6 @@ export default function DocumentViewer({
                     <span>CASHIER:</span>
                     <span>{data.staffInitials || data.staffName || "Admin"}</span>
                   </div>
-                  {dispatchRider && (
-                    <div className="flex justify-between">
-                      <span>RIDER:</span>
-                      <span className="font-bold">{dispatchRider}</span>
-                    </div>
-                  )}
                 </div>
 
                 <div className="border-t border-dashed border-gray-300 py-2">
@@ -859,12 +825,6 @@ export default function DocumentViewer({
                     <span>DELIVERY METHOD:</span>
                     <span className="font-bold text-emerald-700">{data.collectionMethod || data.deliveryMethod || "N/A"}</span>
                   </div>
-                  {dispatchRider && (
-                    <div className="flex justify-between">
-                      <span>DISPATCH RIDER:</span>
-                      <span className="font-bold">{dispatchRider}</span>
-                    </div>
-                  )}
                 </div>
 
                 <div className="border-t border-dashed border-gray-300 py-2">
@@ -952,7 +912,7 @@ export default function DocumentViewer({
                           className="font-serif italic text-xs text-gray-900 text-center truncate" 
                           style={{ borderBottom: "2px solid #4b5563", paddingBottom: "3px", minHeight: "20px", lineHeight: "1.3" }}
                         >
-                          {dispatchRider || data.staffInitials || data.staffName || "Admin"}
+                          {data.staffInitials || data.staffName || "Admin"}
                         </p>
                       </div>
                     </div>
@@ -1043,17 +1003,13 @@ export default function DocumentViewer({
                     <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
                       Delivery Logistics
                     </h4>
-                    <p className="text-xs text-gray-700">
-                      <span className="font-semibold text-gray-500">Dispatch Rider: </span> 
-                      {dispatchRider || "N/A"}
-                    </p>
                     <p className="text-xs text-gray-700 mt-0.5">
                       <span className="font-semibold text-gray-500">Vehicle Number: </span> 
                       M-26-GR 8910
                     </p>
                     <p className="text-xs text-gray-700 mt-0.5">
                       <span className="font-semibold text-gray-500">Method: </span> 
-                      {data.collectionMethod || "Dispatch Rider"}
+                      {data.collectionMethod || "N/A"}
                     </p>
                     <p className="text-xs text-gray-700 mt-0.5">
                       <span className="font-semibold text-gray-500">Status: </span>

@@ -2444,14 +2444,18 @@ export default function AdminDashboard({
 
     const settings = DBStore.getSettings();
     const { africasTalkingUsername, africasTalkingApiKey, africasTalkingSenderId } = settings;
+    const syncUrl = DBStore.getSyncServerUrl();
 
     if (!africasTalkingUsername || !africasTalkingApiKey) {
       alert("Please configure Africa's Talking credentials in Global Settings first.");
       return;
     }
 
+    const targetUrl = `${syncUrl}/api/sms/send`;
+    console.log("SMS broadcast target URL:", targetUrl);
+
     try {
-      const response = await fetch(`${DBStore.getSyncServerUrl()}/api/sms/send`, {
+      const response = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2463,10 +2467,18 @@ export default function AdminDashboard({
         })
       });
 
-      const result = await response.json();
+      console.log("SMS broadcast HTTP status:", response.status, response.statusText);
+
+      let result: any = {};
+      try {
+        result = await response.json();
+      } catch {
+        const text = await response.text();
+        result = { raw: text };
+      }
       console.log("SMS broadcast result:", result);
 
-      DBStore.addAuditLog("Admin", "Broadcast", "SMS", `Sent broadcast message to ${broadcastRecipients.length} recipients via Africa's Talking. Result: ${JSON.stringify(result).substring(0, 300)}`);
+      DBStore.addAuditLog("Admin", "Broadcast", "SMS", `Sent broadcast message to ${broadcastRecipients.length} recipients. URL: ${targetUrl}. Result: ${JSON.stringify(result).substring(0, 300)}`);
 
       setBroadcastSent(true);
       setBroadcastMessage("");
@@ -2474,9 +2486,12 @@ export default function AdminDashboard({
       setTimeout(() => setBroadcastSent(false), 5000);
 
       if (!response.ok || !result.success) {
-        const errorMsg = result.error || result.raw || "Unknown error";
-        if (errorMsg.includes('not allowed') || errorMsg.includes('GET')) {
-          alert(`SMS endpoint not found on the server.\n\nThis means the server needs to be updated. Please redeploy on Render.\n\nError: ${errorMsg}`);
+        const errorMsg = result.error || result.raw || `HTTP ${response.status}: ${response.statusText}`;
+
+        if (errorMsg.includes('not allowed') || errorMsg.includes('GET') || response.status === 405) {
+          alert(`SMS endpoint not found on the server.\n\nThe server needs to be redeployed.\n\nURL tried: ${targetUrl}\n\nError: ${errorMsg}`);
+        } else if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError') || errorMsg.includes('ERR_CONNECTION_REFUSED')) {
+          alert(`Cannot reach the sync server.\n\nURL tried: ${targetUrl}\n\nPossible fixes:\n1. Make sure the server is running (npm run dev or npm start)\n2. Check the sync server URL in Settings\n3. If using Render, redeploy the service\n\nError: ${errorMsg}`);
         } else {
           alert(`SMS broadcast failed.\n\nTotal: ${broadcastRecipients.length} recipients\nBatches: ${result.batches || 0}\n\nError: ${errorMsg.substring(0, 500)}`);
         }
@@ -2505,10 +2520,10 @@ export default function AdminDashboard({
       if (failCount > 0) {
         alert(`Broadcast completed with issues.\n\nTotal: ${broadcastRecipients.length}\nSent: ${successCount}\nFailed: ${failCount}\n\nFailed numbers:\n${failedNumbers.join('\n')}`);
       } else {
-        alert(`Broadcast sent successfully to ${broadcastRecipients.length} recipients in ${result.batches} batch(es).`);
+        alert(`Broadcast sent successfully to ${broadcastRecipients.length} recipients in ${result.batches || 1} batch(es).`);
       }
     } catch (error) {
-      alert("Failed to send broadcast. Check your sync server and Africa's Talking credentials.");
+      alert(`Failed to send broadcast. Cannot reach sync server.\n\nURL tried: ${targetUrl}\n\nError: ${error.message}\n\nPlease check:\n1. Server is running (npm run dev or npm start)\n2. Sync Server URL in Settings is correct\n3. No firewall blocking the connection`);
       console.error("Broadcast error:", error);
     }
   };

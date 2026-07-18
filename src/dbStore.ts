@@ -53,7 +53,8 @@ function getSyncServerUrl(settings?: CompanySettings): string {
   }
   try {
     const { protocol, hostname, port } = window.location;
-    if (port && port !== "3001") {
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    if (isLocal && port && port !== "3001") {
       return `${protocol}//${hostname}:3001`;
     }
   } catch {
