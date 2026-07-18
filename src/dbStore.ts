@@ -156,7 +156,7 @@ const KEYS = {
 };
 
 // Auto-clear demo mockup data on first load of this production release
-const CLEAR_DEMO_FLAG = "printing_db_is_live_v4";
+const CLEAR_DEMO_FLAG = "printing_db_is_live_v5";
 if (typeof window !== "undefined" && !localStorage.getItem(CLEAR_DEMO_FLAG)) {
   localStorage.setItem(CLEAR_DEMO_FLAG, "true");
   localStorage.removeItem(KEYS.JOBS);
@@ -170,6 +170,9 @@ if (typeof window !== "undefined" && !localStorage.getItem(CLEAR_DEMO_FLAG)) {
   localStorage.removeItem(KEYS.SETTINGS);
   localStorage.removeItem(KEYS.STAFF);
   localStorage.removeItem(KEYS.LIVE_ACTIVITY);
+  localStorage.removeItem(KEYS.STAFF_NOTES);
+  localStorage.removeItem(KEYS.STAFF_ATTENDANCE);
+  localStorage.removeItem(KEYS.SMS_CONTACTS);
 }
 
 // Default Staff Accounts
