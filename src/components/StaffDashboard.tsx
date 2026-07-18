@@ -4266,8 +4266,8 @@ export default function StaffDashboard({
                             </div>
                           </div>
 
-                          {/* Quick details sub-stats */}
-                          <div className="grid grid-cols-4 gap-2 text-[10px] pt-3 mt-3 border-t border-white/5 text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-widest font-mono">
+                           {/* Quick details sub-stats */}
+                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] pt-3 mt-3 border-t border-white/5 text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-widest font-mono">
                             <div>
                               <span className="block text-[8px] text-gray-400 font-sans font-black tracking-widest">Opening Stock</span>
                               <span className="text-gray-950 dark:text-zinc-200 font-black">{item.openingStock}</span>
@@ -4630,7 +4630,7 @@ export default function StaffDashboard({
                 </div>
 
                 {/* Financial Health Indicators */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <div className="bg-gray-50/50 dark:bg-zinc-950/40 border border-gray-100 dark:border-zinc-800/80 p-3 rounded-xl text-center">
                     <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Total Price</span>
                     <span className="text-sm font-black text-gray-800 dark:text-zinc-100 mt-1 block">

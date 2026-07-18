@@ -574,14 +574,14 @@ export default function App() {
               onClick={() => setIsMobileSidebarOpen(false)}
             />
             
-            {/* Sidebar Box */}
-            <motion.div
-              initial={{ x: "-100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 220 }}
-              className="relative flex flex-col w-64 max-w-xs bg-[#0F172A] text-slate-300 h-full p-5 shadow-2xl z-50 border-r border-slate-800"
-            >
+             {/* Sidebar Box */}
+             <motion.div
+               initial={{ x: "-100%" }}
+               animate={{ x: 0 }}
+               exit={{ x: "-100%" }}
+               transition={{ type: "spring", damping: 25, stiffness: 220 }}
+               className="relative flex flex-col w-full max-w-xs bg-[#0F172A] text-slate-300 h-full p-5 shadow-2xl z-50 border-r border-slate-800"
+             >
               <div className="flex justify-between items-center pb-5 border-b border-slate-800/60 mb-5">
                 <div className="flex items-center gap-2.5">
                   <img
@@ -695,7 +695,7 @@ export default function App() {
 
                 {/* Notification Dropdown */}
                 {showNotifications && (
-                  <div className="absolute right-0 top-full mt-2 w-80 max-h-[70vh] bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-gray-100 dark:border-zinc-800 z-50 overflow-hidden">
+                  <div className="absolute right-0 top-full mt-2 w-full left-0 sm:left-auto sm:right-0 sm:w-80 sm:max-w-[320px] bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-gray-100 dark:border-zinc-800 z-50 overflow-hidden">
                     <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-3 flex items-center justify-between">
                       <h3 className="text-xs font-black text-white uppercase tracking-wider">Notifications</h3>
                       {notifications.filter(n => !n.isRead).length > 0 && (

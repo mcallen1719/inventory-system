@@ -4002,7 +4002,7 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <div>
                     <label className="block text-[10px] font-black text-indigo-950/80 dark:text-zinc-400 uppercase tracking-wider mb-1.5">Cost ({currency})</label>
                     <input type="number" value={invCost || ""} onChange={(e) => setInvCost(Math.max(0, parseFloat(e.target.value) || 0))} className="w-full glass-input rounded-xl px-2.5 py-2.5 text-xs text-gray-900 dark:text-white font-semibold" />
