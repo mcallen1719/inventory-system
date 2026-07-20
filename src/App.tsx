@@ -438,7 +438,6 @@ export default function App() {
         { id: "staff-activity", label: "Staff Activity", icon: UserCheck },
         { id: "security", label: "Security", icon: ShieldCheck },
         { id: "late-notes", label: "Late Arrival Notes", icon: Clock },
-        { id: "broadcast", label: "SMS Broadcast", icon: MessageSquare },
         { id: "settings", label: "Global Settings", icon: Settings },
         { id: "admin-guide", label: "Admin Guide", icon: BookOpen },
       ]

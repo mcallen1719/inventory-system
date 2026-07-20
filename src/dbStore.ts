@@ -17,7 +17,7 @@ import {
   KanbanStage,
   StaffAccount,
   StaffNote,
-  Contact
+  DeletedJob
 } from "./types";
 import { io } from "socket.io-client";
 
@@ -83,11 +83,15 @@ function createSocket(url: string): ReturnType<typeof io> {
     console.error(`Sync server connection error: ${url}`, err.message);
   });
 
-  socket.on("sync-init", (cache: any) => {
+  socket.on("sync-init", (payload: any) => {
+    const cache = payload && payload.cache ? payload.cache : payload;
+    const version = payload && typeof payload.version === "number" ? payload.version : 0;
     let updated = false;
     for (const key in cache) {
+      if (key.startsWith("__v_")) continue;
       localStorage.setItem(key, JSON.stringify(cache[key]));
       updated = true;
+      try { localStorage.setItem(`__v_${key}`, String(version)); } catch { /* ignore */ }
     }
     if (updated) {
       const event = new CustomEvent("printopia-sync", { detail: { key: "printing_db_init" } });
@@ -95,9 +99,25 @@ function createSocket(url: string): ReturnType<typeof io> {
     }
   });
 
-  socket.on("sync-update", ({ key, data }: { key: string, data: any }) => {
+  socket.on("sync-update", ({ key, data, version }: { key: string, data: any, version?: number }) => {
+    // Never let an older value overwrite a newer one we already hold.
+    if (version !== undefined) {
+      const currentVersion = Number(localStorage.getItem(`__v_${key}`) || "0");
+      if (version < currentVersion) return;
+      try { localStorage.setItem(`__v_${key}`, String(version)); } catch { /* ignore */ }
+    }
     localStorage.setItem(key, JSON.stringify(data));
     const event = new CustomEvent("printopia-sync", { detail: { key } });
+    window.dispatchEvent(event);
+  });
+
+  socket.on("sync-clear", ({ keys, user }: { keys: string[], user: string }) => {
+    (keys || []).forEach((key) => {
+      if (key === "printing_db_staff_accounts" || key === "printing_db_settings") return;
+      localStorage.removeItem(key);
+      localStorage.removeItem(`__v_${key}`);
+    });
+    const event = new CustomEvent("printopia-sync", { detail: { key: "printing_db_init", clearedBy: user } });
     window.dispatchEvent(event);
   });
 
@@ -152,8 +172,8 @@ const KEYS = {
   STAFF: "printing_db_staff_accounts",
   STAFF_NOTES: "printing_db_staff_notes",
   STAFF_ATTENDANCE: "printing_db_staff_attendance",
-  LIVE_ACTIVITY: "printing_db_live_activity",
-  SMS_CONTACTS: "printing_db_sms_contacts"
+  DELETED_JOBS: "printing_db_deleted_jobs",
+  LIVE_ACTIVITY: "printing_db_live_activity"
 };
 
 // Auto-clear demo mockup data on first load of this production release
@@ -173,7 +193,6 @@ if (typeof window !== "undefined" && !localStorage.getItem(CLEAR_DEMO_FLAG)) {
   localStorage.removeItem(KEYS.LIVE_ACTIVITY);
   localStorage.removeItem(KEYS.STAFF_NOTES);
   localStorage.removeItem(KEYS.STAFF_ATTENDANCE);
-  localStorage.removeItem(KEYS.SMS_CONTACTS);
 }
 
 // Default Staff Accounts
@@ -208,10 +227,7 @@ const DEFAULT_SETTINGS: CompanySettings = {
   theme: "light",
   currency: "GHS",
   language: "en",
-  syncServerUrl: "",
-  africasTalkingUsername: "PRINTOPIA DIGITAL PRESS",
-  africasTalkingApiKey: "atsk_188f36219b750459f7dc78e1dfa0876c7c240923b90738986213e12a2fa521a66e2eba6c",
-  africasTalkingSenderId: "PRINTOPIA DIGITAL PRESS"
+  syncServerUrl: ""
 };
 
 // Initial Seed Data for Inventory
@@ -294,7 +310,9 @@ function getStored<T>(key: string, seed: T): T {
 function setStored<T>(key: string, data: T, emit = true) {
   localStorage.setItem(key, JSON.stringify(data));
   if (emit && socket) {
-    socket.emit("sync-update", { key, data });
+    const version = (Number(localStorage.getItem(`__v_${key}`) || 0) + 1);
+    try { localStorage.setItem(`__v_${key}`, String(version)); } catch { /* ignore */ }
+    socket.emit("sync-update", { key, data, version });
   }
 }
 
@@ -414,15 +432,34 @@ export const DBStore = {
     }
   },
 
-  deleteJob(id: string, user: string) {
+  deleteJob(id: string, user: string, refundAmount: number = 0) {
     const jobs = this.getJobs();
     const job = jobs.find(j => j.id === id);
     if (job) {
       const filtered = jobs.filter(j => j.id !== id);
       setStored(KEYS.JOBS, filtered);
-      this.addAuditLog(user, "Delete", "Job Intake", `Deleted Job Record: ${job.jobNumber} for ${job.customerName}.`);
+      // Record the deletion so it shows up in the End-of-Day shift report.
+      const deletedJobs = this.getDeletedJobs();
+      deletedJobs.push({
+        id: `del-${Date.now()}`,
+        originalJobId: job.id,
+        jobNumber: job.jobNumber,
+        customerName: job.customerName,
+        totalAmount: job.totalAmount,
+        depositPaid: job.depositPaid,
+        deletedBy: user,
+        refundAmount: refundAmount,
+        timestamp: new Date().toISOString()
+      });
+      setStored(KEYS.DELETED_JOBS, deletedJobs);
+      this.addAuditLog(user, "Delete", "Job Intake", `Deleted Job ${job.jobNumber} for ${job.customerName}.${refundAmount > 0 ? ` Refund issued: ${refundAmount.toFixed(2)}.` : ""} Reason: customer mind-change / cancelled work.`);
       this.broadcastLiveActivity(user, "Delete", "Job Intake", `Deleted job ${job.jobNumber}`);
+      this.addNotification("job_deleted", `Job ${job.jobNumber} was deleted by ${user}.${refundAmount > 0 ? ` Refund: ${refundAmount.toFixed(2)}.` : ""}`);
     }
+  },
+
+  getDeletedJobs(): DeletedJob[] {
+    return getStored<DeletedJob[]>(KEYS.DELETED_JOBS, []);
   },
 
   // Automatically deplete stock based on job description keywords
@@ -944,18 +981,47 @@ export const DBStore = {
     return newSession;
   },
 
-  getSmsContacts(): Contact[] {
-    const stored = getStored<Contact[]>(KEYS.SMS_CONTACTS, []);
-    if (!stored || stored.length === 0) {
-      const seed = [{ id: "contact-seed-1", name: "Trial Contact", phone: "+233553882928" }];
-      setStored(KEYS.SMS_CONTACTS, seed);
-      return seed;
-    }
-    return stored;
+  // Ask the server for the authoritative shared state and overwrite local copy.
+  // This guarantees every device (anywhere) shows the exact same data.
+  requestFullSync() {
+    const s = ensureSocket();
+    if (!s) return;
+    s.emit("request-sync", {});
+    s.once("sync-init", (payload: any) => {
+      const cache = payload && payload.cache ? payload.cache : payload;
+      const version = payload && typeof payload.version === "number" ? payload.version : 0;
+      for (const key in cache) {
+        if (key.startsWith("__v_")) continue;
+        localStorage.setItem(key, JSON.stringify(cache[key]));
+        try { localStorage.setItem(`__v_${key}`, String(version)); } catch { /* ignore */ }
+      }
+      const event = new CustomEvent("printopia-sync", { detail: { key: "printing_db_init" } });
+      window.dispatchEvent(event);
+    });
   },
 
-  saveSmsContacts(contacts: Contact[]) {
-    setStored(KEYS.SMS_CONTACTS, contacts);
+  // Admin action: wipe the shared store on the server so ALL connected devices
+  // start blank. Local staff accounts / settings are re-seeded from defaults.
+  async clearAllSharedData(user: string): Promise<boolean> {
+    const url = getSyncServerUrl();
+    try {
+      const res = await fetch(`${url}/api/clear-all`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Local cleanup for everything except the admin's own credentials/settings
+      Object.values(KEYS).forEach((k) => {
+        if (k === KEYS.STAFF || k === KEYS.SETTINGS) return;
+        localStorage.removeItem(k);
+        localStorage.removeItem(`__v_${k}`);
+      });
+      return true;
+    } catch (err) {
+      console.error("Clear all shared data failed:", err);
+      return false;
+    }
   },
 
   broadcastLiveActivity(user: string, action: string, module: string, details: string) {

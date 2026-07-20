@@ -16,6 +16,13 @@ export interface User {
   avatarUrl?: string;
 }
 
+export interface PhotocopyLine {
+  id: string;
+  type: "Colored" | "Black & White" | "Custom";
+  quantity: number;
+  unitPrice: number;
+}
+
 export interface PhotocopyOrder {
   colored: boolean;
   blackAndWhite: boolean;
@@ -23,6 +30,14 @@ export interface PhotocopyOrder {
   quantity: number;
   unitPrice: number;
   amount: number;
+  lines: PhotocopyLine[];
+}
+
+export interface PrintingLine {
+  id: string;
+  type: "Colored" | "Black & White" | "Custom";
+  quantity: number;
+  unitPrice: number;
 }
 
 export interface PrintingOrder {
@@ -32,6 +47,7 @@ export interface PrintingOrder {
   quantity: number;
   unitPrice: number;
   amount: number;
+  lines: PrintingLine[];
 }
 
 export interface FrameOrder {
@@ -80,6 +96,18 @@ export interface SpecialServiceOrder {
   description: string;
   quantity: number;
   amount: number;
+}
+
+export interface DeletedJob {
+  id: string;
+  originalJobId: string;
+  jobNumber: string;
+  customerName: string;
+  totalAmount: number;
+  depositPaid: number;
+  deletedBy: string;
+  refundAmount: number;
+  timestamp: string;
 }
 
 export interface GeneralPrintingOrder {
@@ -289,9 +317,6 @@ export interface CompanySettings {
   currency: string; // e.g. "USD", "GHS", "EUR"
   language: string;
   syncServerUrl?: string;
-  africasTalkingUsername?: string;
-  africasTalkingApiKey?: string;
-  africasTalkingSenderId?: string;
 }
 
 export interface StaffAccount {
@@ -315,10 +340,5 @@ export interface StaffNote {
   sessionType?: "Clock In" | "Clock Out" | "Late Arrival";
 }
 
-export interface Contact {
-  id: string;
-  name: string;
-  phone: string;
-  group?: string;
-}
+
 

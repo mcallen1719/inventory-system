@@ -2,7 +2,7 @@ services:
   - type: web
     name: printopia-sync-server
     env: node
-    buildCommand: npm install --include=dev && npm run build
+    buildCommand: npm install --include=dev && npm run build && node -e "require('fs').cpSync('dist','webapp',{recursive:true})"
     startCommand: npm start
     plan: free
     envVars:

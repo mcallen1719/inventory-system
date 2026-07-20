@@ -62,8 +62,6 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
   // Animated background particles
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
-  const staffAccounts = DBStore.getStaffAccounts();
-
   // Track mouse for subtle parallax
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -101,34 +99,34 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
 
     // Verify credentials after simulation
     setTimeout(() => {
-      const s1Account = staffAccounts.find(s => s.id === "staff-1") || { username: "staff1", name: "Staff 1", passwordText: "staff123" };
-      const s2Account = staffAccounts.find(s => s.id === "staff-2") || { username: "staff2", name: "Staff 2", passwordText: "staff456" };
-      const s1Username = s1Account.username.toLowerCase();
-      const s2Username = s2Account.username.toLowerCase();
-      const s1Password = s1Account.passwordText;
-      const s2Password = s2Account.passwordText;
+      const accounts = DBStore.getStaffAccounts();
 
-      const isA = inputVal === "isaah boadu jnr";
-      const isS1 = inputVal === s1Username || inputVal === `${s1Username}@printopia.com` || inputVal === `${s1Username}@printopiadigitalpress.com`;
-      const isS2 = inputVal === s2Username || inputVal === `${s2Username}@printopia.com` || inputVal === `${s2Username}@printopiadigitalpress.com`;
+      // Match by username (or email-style aliases) and password. The staff
+      // account "name" is treated as their canonical terminal/display name.
+      const match = accounts.find(acc => {
+        const u = acc.username.toLowerCase();
+        const isUser =
+          inputVal === u ||
+          inputVal === `${u}@printopia.com` ||
+          inputVal === `${u}@printopiadigitalpress.com`;
+        return isUser && passwordVal === acc.passwordText;
+      });
 
-      if (isA && passwordVal === "zhaogangren04@") {
+      const isA = inputVal === "isaah boadu jnr" || inputVal === "admin";
+      const adminPass = "zhaogangren04@";
+
+      if (isA && passwordVal === adminPass) {
         setIsLoading(false);
         setIsSuccess(true);
         setTimeout(() => {
           onLogin(UserRole.ADMIN, "Isaah Boadu Jnr");
         }, 1000);
-      } else if (isS1 && passwordVal === s1Password) {
+      } else if (match) {
         setIsLoading(false);
         setIsSuccess(true);
+        const terminalName = match.name && match.name.trim() ? match.name : match.username;
         setTimeout(() => {
-          onLogin(UserRole.STAFF, `${s1Account.name}`);
-        }, 1000);
-      } else if (isS2 && passwordVal === s2Password) {
-        setIsLoading(false);
-        setIsSuccess(true);
-        setTimeout(() => {
-          onLogin(UserRole.STAFF, `${s2Account.name}`);
+          onLogin(UserRole.STAFF, terminalName);
         }, 1000);
       } else {
         clearTimeout(stageTimer1);

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -7,6 +7,7 @@ import React from "react";
 import { Printer, Download, X, QrCode, ShieldCheck, CheckCircle, Truck, FileText } from "lucide-react";
 import { CompanySettings } from "../types";
 import logoUrl from "../assets/images/printopia_logo_1783376948226.jpg";
+import logoDataUri from "../assets/images/logoDataUri";
 
 interface DocumentViewerProps {
   type: "invoice" | "receipt" | "waybill" | "delivery_receipt";
@@ -27,9 +28,10 @@ export default function DocumentViewer({
 
   const resolveLogo = () => {
     const raw = (settings.logoUrl || "").trim();
-    if (!raw) return logoUrl;
+    if (!raw) return logoDataUri;
     if (/^https?:\/\//i.test(raw)) return raw;
-    if (raw.startsWith("/src/") || raw.startsWith("src/")) return logoUrl;
+    if (raw.startsWith("data:image")) return raw;
+    if (raw.startsWith("/src/") || raw.startsWith("src/")) return logoDataUri;
     return raw;
   };
 
@@ -80,20 +82,40 @@ export default function DocumentViewer({
       // It's a GeneralPrintingOrder
       const list: Array<{ description: string; quantity: number; unitPrice: number; total: number }> = [];
       if (data.photocopy?.quantity > 0) {
-        list.push({
-          description: `Photocopy (${data.photocopy.colored ? "Colored" : "B&W"})`,
-          quantity: data.photocopy.quantity,
-          unitPrice: data.photocopy.unitPrice,
-          total: data.photocopy.amount
-        });
+        const lines = Array.isArray(data.photocopy.lines) ? data.photocopy.lines : null;
+        if (lines && lines.length) {
+          lines.forEach((l: any) => list.push({
+            description: `Photocopy (${l.type})`,
+            quantity: l.quantity,
+            unitPrice: l.unitPrice,
+            total: l.quantity * l.unitPrice
+          }));
+        } else {
+          list.push({
+            description: `Photocopy (${data.photocopy.colored ? "Colored" : "B&W"})`,
+            quantity: data.photocopy.quantity,
+            unitPrice: data.photocopy.unitPrice,
+            total: data.photocopy.amount
+          });
+        }
       }
       if (data.printing?.quantity > 0) {
-        list.push({
-          description: `Printing (${data.printing.colored ? "Colored" : "B&W"})`,
-          quantity: data.printing.quantity,
-          unitPrice: data.printing.unitPrice,
-          total: data.printing.amount
-        });
+        const lines = Array.isArray(data.printing.lines) ? data.printing.lines : null;
+        if (lines && lines.length) {
+          lines.forEach((l: any) => list.push({
+            description: `Printing (${l.type})`,
+            quantity: l.quantity,
+            unitPrice: l.unitPrice,
+            total: l.quantity * l.unitPrice
+          }));
+        } else {
+          list.push({
+            description: `Printing (${data.printing.colored ? "Colored" : "B&W"})`,
+            quantity: data.printing.quantity,
+            unitPrice: data.printing.unitPrice,
+            total: data.printing.amount
+          });
+        }
       }
       if (data.frame?.quantity > 0) {
         list.push({
@@ -428,7 +450,7 @@ export default function DocumentViewer({
                   alt="Watermark"
                   className="w-4/5 max-w-sm object-contain"
                   style={{ filter: "grayscale(100%) contrast(120%)" }}
-                  referrerPolicy="no-referrer"
+                  
                 />
               </div>
 
@@ -441,7 +463,7 @@ export default function DocumentViewer({
                         src={resolveLogo()}
                         alt="Printopia Logo"
                         className="h-10 w-auto object-contain"
-                        referrerPolicy="no-referrer"
+                        
                       />
                       <span className="text-xl font-bold tracking-tight text-gray-900">
                         {settings.companyName}
@@ -592,7 +614,7 @@ export default function DocumentViewer({
                   alt="Watermark"
                   className="w-3/4 object-contain"
                   style={{ filter: "grayscale(100%) contrast(150%)" }}
-                  referrerPolicy="no-referrer"
+                  
                 />
               </div>
 
@@ -604,7 +626,7 @@ export default function DocumentViewer({
                       src={resolveLogo()}
                       alt="Printopia Logo"
                       className="h-12 w-auto object-contain grayscale"
-                      referrerPolicy="no-referrer"
+                      
                     />
                   </div>
                   <h2 className="text-base font-bold uppercase tracking-tight text-gray-900">
@@ -775,7 +797,7 @@ export default function DocumentViewer({
                   alt="Watermark"
                   className="w-3/4 object-contain"
                   style={{ filter: "grayscale(100%) contrast(150%)" }}
-                  referrerPolicy="no-referrer"
+                  
                 />
               </div>
 
@@ -787,7 +809,7 @@ export default function DocumentViewer({
                       src={resolveLogo()}
                       alt="Printopia Logo"
                       className="h-12 w-auto object-contain grayscale"
-                      referrerPolicy="no-referrer"
+                      
                     />
                   </div>
                   <h2 className="text-base font-bold uppercase tracking-tight text-gray-900">
@@ -958,7 +980,7 @@ export default function DocumentViewer({
                   alt="Watermark"
                   className="w-4/5 max-w-sm object-contain"
                   style={{ filter: "grayscale(100%) contrast(120%)" }}
-                  referrerPolicy="no-referrer"
+                  
                 />
               </div>
 
@@ -971,7 +993,7 @@ export default function DocumentViewer({
                         src={resolveLogo()}
                         alt="Printopia Logo"
                         className="h-10 w-auto object-contain"
-                        referrerPolicy="no-referrer"
+                        
                       />
                       <span className="text-xl font-bold tracking-tight text-gray-900">
                         Printopia Logistics

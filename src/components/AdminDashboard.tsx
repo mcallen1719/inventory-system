@@ -48,7 +48,7 @@ import {
   Cell
 } from "recharts";
 import { DBStore } from "../dbStore";
-import { CompanySettings, Expenditure, InventoryItem, UserRole, StaffAccount, StaffNote, Contact } from "../types";
+import { CompanySettings, Expenditure, InventoryItem, UserRole, StaffAccount, StaffNote } from "../types";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -71,7 +71,7 @@ export default function AdminDashboard({
   setActiveTab: propSetActiveTab,
   refreshTrigger = 0
 }: AdminDashboardProps) {
-  const [internalAdminTab, setInternalAdminTab] = useState<"overview" | "expenditures" | "sales-reports" | "statistics" | "inventory" | "eod" | "audit" | "security" | "late-notes" | "broadcast" | "settings">("overview");
+  const [internalAdminTab, setInternalAdminTab] = useState<"overview" | "expenditures" | "sales-reports" | "statistics" | "inventory" | "eod" | "audit" | "security" | "late-notes" | "settings">("overview");
 
   const adminTab = (propActiveTab as any) || internalAdminTab;
   const setAdminTab = propSetActiveTab || setInternalAdminTab;
@@ -1717,6 +1717,62 @@ export default function AdminDashboard({
     }
     yPos = (doc as any).lastAutoTable.finalY + 10;
 
+    // Deleted Jobs / Refunds Section
+    addSectionHeader("Deleted Work & Refunds", [185, 14, 14]);
+    addNote("Jobs that were deleted by staff during the month (customer mind-change / cancelled work). The refunded amounts are subtracted from gross job revenue above.");
+    {
+      const monthDeleted = DBStore.getDeletedJobs().filter(d => (d.timestamp || "").startsWith(currentMonth));
+      const totalRefund = monthDeleted.reduce((s, d) => s + (d.refundAmount || 0), 0);
+      const delSummary = [
+        ["Jobs Deleted This Month", String(monthDeleted.length)],
+        ["Total Amount Refunded", `${currency} ${totalRefund.toFixed(2)}`]
+      ];
+      (autoTable as any)(doc, {
+        startY: yPos,
+        head: [["Deleted Work Metric", "Value"]],
+        body: delSummary,
+        theme: "grid",
+        headStyles: { fillColor: [185, 14, 14], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9 },
+        bodyStyles: { fontSize: 8 },
+        alternateRowStyles: { fillColor: [255, 235, 235] },
+        columnStyles: { 0: { cellWidth: 110 }, 1: { cellWidth: 50, halign: "right", fontStyle: "bold" } },
+        margin: { left: margin, right: margin }
+      });
+      yPos = (doc as any).lastAutoTable.finalY + 6;
+
+      if (monthDeleted.length > 0) {
+        addSubHeader("Deleted Job Log");
+        const delRows = monthDeleted.map(d => [
+          d.jobNumber,
+          d.customerName,
+          d.deletedBy,
+          `${currency} ${(d.refundAmount || 0).toFixed(2)}`
+        ]);
+        (autoTable as any)(doc, {
+          startY: yPos,
+          head: [["Job No.", "Customer", "Deleted By", `Refund (${currency})`]],
+          body: delRows,
+          theme: "grid",
+          headStyles: { fillColor: [185, 14, 14], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8 },
+          bodyStyles: { fontSize: 8, textColor: [120, 10, 10] },
+          alternateRowStyles: { fillColor: [255, 235, 235] },
+          columnStyles: {
+            0: { cellWidth: 35 },
+            1: { cellWidth: 55 },
+            2: { cellWidth: 40 },
+            3: { cellWidth: 30, halign: "right" }
+          },
+          margin: { left: margin, right: margin }
+        });
+      } else {
+        doc.setFontSize(9);
+        doc.setTextColor(40, 160, 40);
+        doc.text("No jobs were deleted this month.", margin, yPos);
+        doc.setTextColor(0, 0, 0);
+      }
+    }
+    yPos = (doc as any).lastAutoTable.finalY + 10;
+
     // Footer
     doc.setFillColor(240, 240, 250);
     doc.rect(0, yPos, pageWidth, 15, "F");
@@ -2180,9 +2236,6 @@ export default function AdminDashboard({
   const [settInvoiceFooter, setSettInvoiceFooter] = useState(settings.invoiceFooter);
   const [settCurrency, setSettCurrency] = useState(settings.currency);
   const [settSyncServerUrl, setSettSyncServerUrl] = useState(settings.syncServerUrl || "");
-  const [settAfricasTalkingUsername, setSettAfricasTalkingUsername] = useState(settings.africasTalkingUsername || "");
-  const [settAfricasTalkingApiKey, setSettAfricasTalkingApiKey] = useState(settings.africasTalkingApiKey || "");
-  const [settAfricasTalkingSenderId, setSettAfricasTalkingSenderId] = useState(settings.africasTalkingSenderId || "");
 
   // Load staff accounts
   const initialStaff = DBStore.getStaffAccounts();
@@ -2222,17 +2275,6 @@ export default function AdminDashboard({
   const [attSessionStaffId, setAttSessionStaffId] = useState<"staff-1" | "staff-2">("staff-1");
   const [attSessionType, setAttSessionType] = useState<"Clock In" | "Clock Out">("Clock In");
   const [attSessionTime, setAttSessionTime] = useState(() => new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }));
-
-  // SMS Broadcast State
-  const [broadcastMessage, setBroadcastMessage] = useState("");
-  const [broadcastSent, setBroadcastSent] = useState(false);
-  const [broadcastCopied, setBroadcastCopied] = useState(false);
-  const [smsContacts, setSmsContacts] = useState<Contact[]>(() => DBStore.getSmsContacts());
-  const [newContactName, setNewContactName] = useState("");
-  const [newContactPhone, setNewContactPhone] = useState("");
-  const [editingContactId, setEditingContactId] = useState<string | null>(null);
-  const [editingContactName, setEditingContactName] = useState("");
-  const [editingContactPhone, setEditingContactPhone] = useState("");
 
   // Staff Activity Tracking Panel State
   const [selectedStaffFilter, setSelectedStaffFilter] = useState<string>("all");
@@ -2349,198 +2391,6 @@ export default function AdminDashboard({
     });
     onRefreshGlobalState();
     alert("Session recorded successfully.");
-  };
-
-  // SMS Broadcast Handlers
-  const broadcastRecipients = useMemo(() => {
-    if (smsContacts.length > 0) {
-      return smsContacts.map(c => c.phone);
-    }
-    return DBStore.getAllCustomerPhoneNumbers();
-  }, [smsContacts, refreshTrigger]);
-
-  const formatPhoneNumber = (raw: string): string => {
-    const trimmed = raw.trim();
-    if (!trimmed) return trimmed;
-    if (trimmed.startsWith('+')) return trimmed;
-    if (trimmed.startsWith('233')) return `+${trimmed}`;
-    return `+233${trimmed.replace(/^0+/, '')}`;
-  };
-
-  const handleAddContact = () => {
-    if (!newContactName.trim() || !newContactPhone.trim()) {
-      alert("Please enter both name and phone number.");
-      return;
-    }
-    const contact = {
-      id: `contact-${Date.now()}`,
-      name: newContactName.trim(),
-      phone: formatPhoneNumber(newContactPhone)
-    };
-    const updated = [...smsContacts, contact];
-    setSmsContacts(updated);
-    DBStore.saveSmsContacts(updated);
-    setNewContactName("");
-    setNewContactPhone("");
-    DBStore.addAuditLog("Admin", "Create", "SMS Contacts", `Added contact: ${contact.name} (${contact.phone})`);
-    onRefreshGlobalState();
-  };
-
-  const handleEditContact = (id: string) => {
-    setEditingContactId(id);
-    const contact = smsContacts.find(c => c.id === id);
-    if (contact) {
-      setEditingContactName(contact.name);
-      setEditingContactPhone(contact.phone);
-    }
-  };
-
-  const handleSaveEditContact = () => {
-    if (!editingContactName.trim() || !editingContactPhone.trim()) {
-      alert("Please enter both name and phone number.");
-      return;
-    }
-    const updated = smsContacts.map(c =>
-      c.id === editingContactId
-        ? { ...c, name: editingContactName.trim(), phone: formatPhoneNumber(editingContactPhone) }
-        : c
-    );
-    setSmsContacts(updated);
-    DBStore.saveSmsContacts(updated);
-    setEditingContactId(null);
-    setEditingContactName("");
-    setEditingContactPhone("");
-    DBStore.addAuditLog("Admin", "Edit", "SMS Contacts", `Updated contact: ${editingContactName.trim()} (${editingContactPhone.trim()})`);
-    onRefreshGlobalState();
-  };
-
-  const handleDeleteContact = (id: string) => {
-    const contact = smsContacts.find(c => c.id === id);
-    const updated = smsContacts.filter(c => c.id !== id);
-    setSmsContacts(updated);
-    DBStore.saveSmsContacts(updated);
-    DBStore.addAuditLog("Admin", "Delete", "SMS Contacts", `Removed contact: ${contact?.name} (${contact?.phone})`);
-    onRefreshGlobalState();
-  };
-
-  const handleClearAllContacts = () => {
-    if (confirm("Are you sure you want to clear ALL SMS contacts? This cannot be undone.")) {
-      setSmsContacts([]);
-      DBStore.saveSmsContacts([]);
-      DBStore.addAuditLog("Admin", "Delete", "SMS Contacts", "Cleared all SMS contacts.");
-      onRefreshGlobalState();
-    }
-  };
-
-  const handleSendBroadcast = async () => {
-    if (!broadcastMessage.trim()) {
-      alert("Please enter a message before sending.");
-      return;
-    }
-    if (broadcastRecipients.length === 0) {
-      alert("No recipients found. Add contacts or customers with phone numbers first.");
-      return;
-    }
-
-    const settings = DBStore.getSettings();
-    const { africasTalkingUsername, africasTalkingApiKey, africasTalkingSenderId } = settings;
-    const syncUrl = DBStore.getSyncServerUrl();
-
-    if (!africasTalkingUsername || !africasTalkingApiKey) {
-      alert("Please configure Africa's Talking credentials in Global Settings first.");
-      return;
-    }
-
-    const targetUrl = `${syncUrl}/api/sms/send`;
-    console.log("SMS broadcast target URL:", targetUrl);
-
-    try {
-      const response = await fetch(targetUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: broadcastRecipients,
-          message: broadcastMessage.trim(),
-          username: africasTalkingUsername,
-          apiKey: africasTalkingApiKey,
-          senderId: africasTalkingSenderId || undefined
-        })
-      });
-
-      console.log("SMS broadcast HTTP status:", response.status, response.statusText);
-
-      let result: any = {};
-      try {
-        result = await response.json();
-      } catch {
-        const text = await response.text();
-        result = { raw: text };
-      }
-      console.log("SMS broadcast result:", result);
-
-      DBStore.addAuditLog("Admin", "Broadcast", "SMS", `Sent broadcast message to ${broadcastRecipients.length} recipients. URL: ${targetUrl}. Result: ${JSON.stringify(result).substring(0, 300)}`);
-
-      setBroadcastSent(true);
-      setBroadcastMessage("");
-      onRefreshGlobalState();
-      setTimeout(() => setBroadcastSent(false), 5000);
-
-      if (!response.ok || !result.success) {
-        const errorMsg = result.error || result.raw || `HTTP ${response.status}: ${response.statusText}`;
-
-        if (errorMsg.includes('not allowed') || errorMsg.includes('GET') || response.status === 405) {
-          alert(`SMS endpoint not found on the server.\n\nThe server needs to be redeployed.\n\nURL tried: ${targetUrl}\n\nError: ${errorMsg}`);
-        } else if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError') || errorMsg.includes('ERR_CONNECTION_REFUSED')) {
-          alert(`Cannot reach the sync server.\n\nURL tried: ${targetUrl}\n\nPossible fixes:\n1. Make sure the server is running (npm run dev or npm start)\n2. Check the sync server URL in Settings\n3. If using Render, redeploy the service\n\nError: ${errorMsg}`);
-        } else {
-          alert(`SMS broadcast failed.\n\nTotal: ${broadcastRecipients.length} recipients\nBatches: ${result.batches || 0}\n\nError: ${errorMsg.substring(0, 500)}`);
-        }
-        return;
-      }
-
-      let successCount = broadcastRecipients.length;
-      let failCount = 0;
-      const failedNumbers = [];
-
-      if (result.results && Array.isArray(result.results)) {
-        for (const batch of result.results) {
-          if (batch.parsed && batch.parsed.SMSMessageData && batch.parsed.SMSMessageData.Recipients) {
-            for (const r of batch.parsed.SMSMessageData.Recipients) {
-              if (r.status && r.status.toLowerCase() !== 'success') {
-                failCount++;
-                failedNumbers.push(`${r.number} (${r.status || 'unknown'})`);
-              }
-            }
-          }
-        }
-      }
-
-      successCount = broadcastRecipients.length - failCount;
-
-      if (failCount > 0) {
-        alert(`Broadcast completed with issues.\n\nTotal: ${broadcastRecipients.length}\nSent: ${successCount}\nFailed: ${failCount}\n\nFailed numbers:\n${failedNumbers.join('\n')}`);
-      } else {
-        alert(`Broadcast sent successfully to ${broadcastRecipients.length} recipients in ${result.batches || 1} batch(es).`);
-      }
-    } catch (error) {
-      alert(`Failed to send broadcast. Cannot reach sync server.\n\nURL tried: ${targetUrl}\n\nError: ${error.message}\n\nPlease check:\n1. Server is running (npm run dev or npm start)\n2. Sync Server URL in Settings is correct\n3. No firewall blocking the connection`);
-      console.error("Broadcast error:", error);
-    }
-  };
-
-  const handleCopyBroadcastNumbers = async () => {
-    if (broadcastRecipients.length === 0) {
-      alert("No customer phone numbers found.");
-      return;
-    }
-    const numbersText = broadcastRecipients.join("\n");
-    try {
-      await navigator.clipboard.writeText(numbersText);
-      setBroadcastCopied(true);
-      setTimeout(() => setBroadcastCopied(false), 2000);
-    } catch {
-      alert("Could not copy to clipboard. Please try again.");
-    }
   };
 
   // Modal Generate Random Password Helper
@@ -2708,10 +2558,7 @@ export default function AdminDashboard({
       receiptFooter: settReceiptFooter,
       invoiceFooter: settInvoiceFooter,
       currency: settCurrency,
-      syncServerUrl: settSyncServerUrl,
-      africasTalkingUsername: settAfricasTalkingUsername,
-      africasTalkingApiKey: settAfricasTalkingApiKey,
-      africasTalkingSenderId: settAfricasTalkingSenderId
+      syncServerUrl: settSyncServerUrl
     };
 
     const updatedStaff: StaffAccount[] = [
@@ -2774,13 +2621,18 @@ export default function AdminDashboard({
 
   const [isClearDataModalOpen, setIsClearDataModalOpen] = useState(false);
 
-  const handleExecuteClearData = () => {
+  const handleExecuteClearData = async () => {
+    const ok = await DBStore.clearAllSharedData("Admin");
     DBStore.resetAllData("Admin");
     setPurgeType(null);
     setPurgeConfirmText("");
     setIsClearDataModalOpen(false);
     onRefreshGlobalState();
-    alert("All system data has been cleared and factory defaults restored. Audit log retained the reset action.");
+    if (ok) {
+      alert("All shared business data has been cleared on the server and every connected device. Staff logins and settings were kept; the audit log retained the reset action.");
+    } else {
+      alert("Local data was cleared, but the server-wide clear could not be reached. Other devices may still hold old data. Connect to the sync server and try again, or use 'Sync Now'.");
+    }
   };
 
   const handleDownloadLiveShiftCSV = () => {
@@ -2835,7 +2687,6 @@ export default function AdminDashboard({
           { id: "staff-activity", label: "Staff Activity", icon: UserCheck },
           { id: "security", label: "Security", icon: ShieldCheck },
           { id: "late-notes", label: "Late Arrival Notes", icon: Clock },
-          { id: "broadcast", label: "SMS Broadcast", icon: MessageSquare },
           { id: "settings", label: "Global Settings", icon: Settings },
           { id: "admin-guide", label: "Admin Guide", icon: BookOpen }
         ].map((tab) => {
@@ -4727,8 +4578,20 @@ export default function AdminDashboard({
                   Review credential compliance and execute instant security overrides for registered staff operators.
                 </p>
               </div>
-              <div className="text-[10px] bg-emerald-500/10 border border-emerald-500/15 px-3 py-1.5 rounded-xl font-bold font-mono text-emerald-700 dark:text-emerald-400 self-start md:self-auto uppercase tracking-wider">
-                ✓ SSL/TLS Encrypted Storage
+              <div className="flex flex-col items-start md:items-end gap-2">
+                <div className="text-[10px] bg-emerald-500/10 border border-emerald-500/15 px-3 py-1.5 rounded-xl font-bold font-mono text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+                  ✓ SSL/TLS Encrypted Storage
+                </div>
+                <button
+                  onClick={() => {
+                    DBStore.requestFullSync();
+                    onRefreshGlobalState();
+                    alert("Syncing with the shared server now. This device will show the exact same data as every other connected device.");
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-black py-2 px-4 text-[10px] transition active:scale-95 cursor-pointer uppercase tracking-widest"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" /> Sync Now
+                </button>
               </div>
             </div>
 
@@ -4742,21 +4605,77 @@ export default function AdminDashboard({
                 {[
                   {
                     id: "staff-1" as const,
-                    name: staff1Name || "Staff Member 1",
-                    username: staff1User || "staff1",
-                     role: staff1Role || "Staff 1",
+                    name: staff1Name,
+                    username: staff1User,
+                    role: staff1Role,
                     passText: staff1Pass,
                     avatarLetter: "1"
                   },
                   {
                     id: "staff-2" as const,
-                    name: staff2Name || "Staff Member 2",
-                    username: staff2User || "staff2",
-                    role: staff2Role || "Inventory Officer",
+                    name: staff2Name,
+                    username: staff2User,
+                    role: staff2Role,
                     passText: staff2Pass,
                     avatarLetter: "2"
                   }
-                ].map((member) => (
+                ].map((member) => {
+                  const isStaff1 = member.id === "staff-1";
+                  const localName = isStaff1 ? staff1Name : staff2Name;
+                  const localUser = isStaff1 ? staff1User : staff2User;
+                  const localRole = isStaff1 ? staff1Role : staff2Role;
+                  const localPass = isStaff1 ? staff1Pass : staff2Pass;
+                  const setLocalName = isStaff1 ? setStaff1Name : setStaff2Name;
+                  const setLocalUser = isStaff1 ? setStaff1User : setStaff2User;
+                  const setLocalRole = isStaff1 ? setStaff1Role : setStaff2Role;
+                  const setLocalPass = isStaff1 ? setStaff1Pass : setStaff2Pass;
+
+                  const saveCard = () => {
+                    if (!localName.trim() || !localUser.trim() || !localPass.trim()) {
+                      alert("Error: Please provide a terminal name, username, and password for this staff member!");
+                      return;
+                    }
+                    if (localPass.trim().length < 4) {
+                      alert("Security Alert: The password must be at least 4 characters long.");
+                      return;
+                    }
+                    const otherUser = isStaff1 ? staff2User.trim().toLowerCase() : staff1User.trim().toLowerCase();
+                    const otherPass = isStaff1 ? staff2Pass.trim() : staff1Pass.trim();
+                    if (localUser.trim().toLowerCase() === otherUser) {
+                      alert("Error: Staff usernames must be unique!");
+                      return;
+                    }
+                    if (localPass.trim() === otherPass) {
+                      alert("Security Error: Both staff members must have completely unique passwords!");
+                      return;
+                    }
+                    if (localUser.trim().toLowerCase() === "admin") {
+                      alert("Error: Staff usernames cannot be 'admin'!");
+                      return;
+                    }
+                    const updatedStaff: StaffAccount[] = [
+                      {
+                        id: "staff-1",
+                        name: staff1Name.trim(),
+                        username: staff1User.trim().toLowerCase(),
+                        passwordText: staff1Pass,
+                        roleDescription: staff1Role.trim()
+                      },
+                      {
+                        id: "staff-2",
+                        name: staff2Name.trim(),
+                        username: staff2User.trim().toLowerCase(),
+                        passwordText: staff2Pass,
+                        roleDescription: staff2Role.trim()
+                      }
+                    ];
+                    DBStore.saveStaffAccounts(updatedStaff);
+                    DBStore.addAuditLog("Admin", "Edit", "Auth", `Updated credentials for ${localName.trim()}: terminal name "${localName.trim()}", username "${localUser.trim().toLowerCase()}". This is now their new login.`);
+                    onRefreshGlobalState();
+                    alert(`${localName.trim()}'s terminal name, username and password were updated. This is now their new login across all devices.`);
+                  };
+
+                  return (
                   <div 
                     key={member.id}
                     className="glass-card border border-white/10 dark:border-zinc-800/40 bg-white/40 dark:bg-zinc-900/10 p-6 rounded-2xl flex flex-col justify-between gap-6 shadow-md hover:shadow-lg transition-all duration-300 relative overflow-hidden"
@@ -4773,50 +4692,71 @@ export default function AdminDashboard({
                           Staff Terminal
                         </span>
                         <h4 className="text-sm font-black text-gray-900 dark:text-white pt-1">
-                          {member.name}
+                          {localName || "Staff Member"}
                         </h4>
                         <p className="text-xs text-gray-400 dark:text-zinc-500 font-semibold">
-                          {member.role}
+                          {localRole || "Staff"}
                         </p>
                       </div>
                     </div>
 
-                    <div className="bg-slate-500/5 dark:bg-zinc-950/40 p-4 rounded-xl border border-white/5 space-y-2.5 relative z-10">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-gray-400 dark:text-zinc-500 font-bold uppercase text-[9px] tracking-wider">Username</span>
-                        <span className="font-mono font-black text-gray-900 dark:text-white bg-white/50 dark:bg-zinc-900 px-2.5 py-0.5 rounded border border-white/10">
-                          {member.username}
-                        </span>
+                    <div className="bg-slate-500/5 dark:bg-zinc-950/40 p-4 rounded-xl border border-white/5 space-y-3 relative z-10">
+                      <div className="space-y-1.5">
+                        <label className="block text-[9px] font-bold uppercase text-gray-400 dark:text-zinc-500 tracking-wider">Terminal / Display Name</label>
+                        <input
+                          type="text"
+                          value={localName}
+                          onChange={(e) => setLocalName(e.target.value)}
+                          placeholder="e.g. Kwame Printing"
+                          className="w-full glass-input rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white font-semibold"
+                        />
                       </div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-gray-400 dark:text-zinc-500 font-bold uppercase text-[9px] tracking-wider">Access Status</span>
-                        <span className="inline-flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400 text-[10px] tracking-widest uppercase">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          Authorized
-                        </span>
+                      <div className="space-y-1.5">
+                        <label className="block text-[9px] font-bold uppercase text-gray-400 dark:text-zinc-500 tracking-wider">Username (Login ID)</label>
+                        <input
+                          type="text"
+                          value={localUser}
+                          onChange={(e) => setLocalUser(e.target.value)}
+                          placeholder="e.g. kwame"
+                          className="w-full glass-input rounded-lg px-3 py-2 text-xs font-mono text-gray-900 dark:text-white font-semibold"
+                        />
                       </div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-gray-400 dark:text-zinc-500 font-bold uppercase text-[9px] tracking-wider">Active Password</span>
-                        <span className="font-mono font-bold text-gray-500 dark:text-zinc-400">
-                          {"•".repeat(Math.max(6, member.passText.length))}
-                        </span>
+                      <div className="space-y-1.5">
+                        <label className="block text-[9px] font-bold uppercase text-gray-400 dark:text-zinc-500 tracking-wider">Password</label>
+                        <input
+                          type="text"
+                          value={localPass}
+                          onChange={(e) => setLocalPass(e.target.value)}
+                          placeholder="New password"
+                          className="w-full glass-input rounded-lg px-3 py-2 text-xs font-mono text-gray-900 dark:text-white font-semibold"
+                        />
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => {
-                        setResetModalStaffId(member.id);
-                        setResetModalNewPassword("");
-                        setResetModalConfirmPassword("");
-                        setResetModalShowPassword(false);
-                        setIsResetModalOpen(true);
-                      }}
-                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-black py-3 text-xs shadow-md shadow-indigo-600/15 transition active:scale-95 cursor-pointer relative z-10 uppercase tracking-widest text-[11px]"
-                    >
-                      <Key className="h-4 w-4" /> Reset Password
-                    </button>
+                    <div className="flex gap-2 relative z-10">
+                      <button
+                        onClick={saveCard}
+                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-black py-3 text-xs shadow-md shadow-indigo-600/15 transition active:scale-95 cursor-pointer uppercase tracking-widest text-[11px]"
+                      >
+                        <CheckCircle className="h-4 w-4" /> Save Login
+                      </button>
+                      <button
+                        onClick={() => {
+                          setResetModalStaffId(member.id);
+                          setResetModalNewPassword("");
+                          setResetModalConfirmPassword("");
+                          setResetModalShowPassword(false);
+                          setIsResetModalOpen(true);
+                        }}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/40 dark:bg-zinc-900/40 hover:bg-white/60 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-200 font-black py-3 px-4 text-xs transition active:scale-95 cursor-pointer uppercase tracking-widest text-[11px]"
+                        title="Generate a random password"
+                      >
+                        <Key className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -4845,226 +4785,6 @@ export default function AdminDashboard({
         </div>
       )}
 
-      {/* ----------------------------------------------------
-          TAB: SMS BROADCAST
-          ---------------------------------------------------- */}
-      {adminTab === "broadcast" && (
-        <div className="space-y-6">
-          <div className="glass-panel rounded-2xl p-6 md:p-8 space-y-6 shadow-xl relative overflow-hidden paper-texture">
-            <div className="cmyk-bar absolute top-0 left-0 right-0 h-[3px]" />
-            
-            <div className="border-b border-white/10 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-base font-black text-gray-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-                  SMS Broadcast Center
-                </h3>
-                <p className="text-xs text-gray-400 dark:text-zinc-500 font-medium mt-0.5">
-                  Send one message to all saved customer phone numbers at once. You can also add contacts manually below.
-                </p>
-              </div>
-              <div className="text-[10px] bg-indigo-500/10 border border-indigo-500/15 px-3 py-1.5 rounded-xl font-bold font-mono text-indigo-700 dark:text-indigo-400 self-start md:self-auto uppercase tracking-wider">
-                {broadcastRecipients.length} Recipients
-              </div>
-            </div>
-
-            {broadcastSent && (
-              <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                <CheckCircle className="h-4 w-4" />
-                Broadcast sent successfully via Africa's Talking!
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Message Composer */}
-              <div className="glass-card border border-white/10 dark:border-zinc-800/40 bg-white/40 dark:bg-zinc-900/10 p-6 rounded-2xl space-y-4 shadow-md h-fit">
-                <h4 className="text-xs font-black text-gray-800 dark:text-white uppercase tracking-widest border-b border-white/10 pb-2">
-                  Compose Message
-                </h4>
-
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <label className="block text-[10px] font-black text-indigo-950/80 dark:text-zinc-400 uppercase tracking-wider mb-1.5">Message *</label>
-                    <textarea
-                      value={broadcastMessage}
-                      onChange={(e) => setBroadcastMessage(e.target.value)}
-                      placeholder="Type your broadcast message here..."
-                      rows={6}
-                      maxLength={160}
-                      className="w-full glass-input rounded-xl px-3.5 py-2.5 text-xs text-gray-900 dark:text-white font-semibold resize-y"
-                    />
-                    <p className="text-[9px] text-gray-400 dark:text-zinc-500 mt-1 font-medium">
-                      {broadcastMessage.length}/160 characters
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={handleSendBroadcast}
-                    disabled={broadcastRecipients.length === 0}
-                    className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 py-3.5 text-xs font-black text-white shadow-lg shadow-indigo-500/25 active:scale-95 cursor-pointer transition-all duration-300 uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Send Broadcast
-                  </button>
-
-                  <p className="text-[9px] text-gray-400 dark:text-zinc-500 font-medium leading-relaxed">
-                    Requires Africa's Talking credentials in Global Settings. Messages will be sent to all saved customer numbers or manually added contacts.
-                  </p>
-                </div>
-              </div>
-
-              {/* Recipients List & Contact Management */}
-              <div className="glass-card border border-white/10 dark:border-zinc-800/40 bg-white/40 dark:bg-zinc-900/10 p-6 rounded-2xl shadow-md">
-                <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
-                  <h4 className="text-xs font-black text-gray-800 dark:text-white uppercase tracking-widest">
-                    Recipients ({broadcastRecipients.length})
-                  </h4>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={handleCopyBroadcastNumbers}
-                      disabled={broadcastRecipients.length === 0}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/10 hover:bg-white/20 text-gray-700 dark:text-zinc-300 font-bold py-2 px-3 text-[10px] cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {broadcastCopied ? "Copied!" : "Copy All Numbers"}
-                    </button>
-                    {smsContacts.length > 0 && (
-                      <button
-                        onClick={handleClearAllContacts}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 font-bold py-2 px-3 text-[10px] cursor-pointer transition"
-                      >
-                        Clear All
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Add Contact Form */}
-                <div className="border border-white/10 rounded-xl p-4 mb-4 space-y-3">
-                  <h5 className="text-[10px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-widest">Add New Contact</h5>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[9px] font-black text-gray-500 dark:text-zinc-500 uppercase tracking-wider mb-1">Name</label>
-                      <input
-                        type="text"
-                        value={newContactName}
-                        onChange={(e) => setNewContactName(e.target.value)}
-                        placeholder="Contact name"
-                        className="w-full glass-input rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white font-semibold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[9px] font-black text-gray-500 dark:text-zinc-500 uppercase tracking-wider mb-1">Phone Number</label>
-                      <input
-                        type="text"
-                        value={newContactPhone}
-                        onChange={(e) => setNewContactPhone(e.target.value)}
-                        onBlur={(e) => setNewContactPhone(formatPhoneNumber(e.target.value))}
-                        placeholder="e.g. 0201234567 or +233241234567"
-                        className="w-full glass-input rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white font-semibold"
-                      />
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleAddContact}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-black py-2.5 text-[10px] shadow-md cursor-pointer active:scale-95 transition-all uppercase tracking-widest"
-                  >
-                    <PlusCircle className="h-3.5 w-3.5" /> Add Contact
-                  </button>
-                </div>
-
-                {/* Contacts List */}
-                <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
-                  {broadcastRecipients.length === 0 ? (
-                    <div className="py-12 text-center">
-                      <MessageSquare className="h-10 w-10 text-gray-300 dark:text-zinc-700 mx-auto mb-3" />
-                      <p className="text-xs font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest">No recipients found.</p>
-                      <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1">Add contacts manually above or add customers with phone numbers in orders.</p>
-                    </div>
-                  ) : smsContacts.length > 0 ? (
-                    <div className="space-y-2">
-                      {smsContacts.map((contact) => (
-                        <div key={contact.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-white/10 dark:bg-zinc-900/20 border border-white/5">
-                          {editingContactId === contact.id ? (
-                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <input
-                                type="text"
-                                value={editingContactName}
-                                onChange={(e) => setEditingContactName(e.target.value)}
-                                className="glass-input rounded px-2 py-1 text-xs"
-                              />
-                              <input
-                                type="text"
-                                value={editingContactPhone}
-                                onChange={(e) => setEditingContactPhone(e.target.value)}
-                                onBlur={(e) => setEditingContactPhone(formatPhoneNumber(e.target.value))}
-                                className="glass-input rounded px-2 py-1 text-xs"
-                              />
-                            </div>
-                          ) : (
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-gray-900 dark:text-white truncate">{contact.name}</p>
-                              <p className="text-[10px] font-mono text-gray-500 dark:text-zinc-400">{contact.phone}</p>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-1 ml-2 shrink-0">
-                            {editingContactId === contact.id ? (
-                              <>
-                                <button
-                                  onClick={handleSaveEditContact}
-                                  className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 cursor-pointer transition"
-                                  title="Save"
-                                >
-                                  <CheckCircle className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => setEditingContactId(null)}
-                                  className="p-1.5 rounded-lg bg-gray-500/10 text-gray-600 hover:bg-gray-500/20 cursor-pointer transition"
-                                  title="Cancel"
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => handleEditContact(contact.id)}
-                                  className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-600 hover:bg-indigo-500/20 cursor-pointer transition"
-                                  title="Edit"
-                                >
-                                  <FileText className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteContact(contact.id)}
-                                  className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 cursor-pointer transition"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium mb-2">Auto-collected from customer orders:</p>
-                      {broadcastRecipients.map((phone, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 dark:bg-zinc-900/20 border border-white/5 text-xs font-mono text-gray-700 dark:text-zinc-300"
-                        >
-                          <span className="h-2 w-2 rounded-full bg-indigo-500/50 shrink-0" />
-                          {phone}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       {adminTab === "settings" && (
         <div className="max-w-2xl mx-auto glass-panel rounded-2xl p-8 space-y-6 shadow-xl relative overflow-hidden paper-texture">
           {/* Top CMYK Accent Bar */}
@@ -5121,46 +4841,6 @@ export default function AdminDashboard({
               />
               <p className="text-[9px] text-gray-400 dark:text-zinc-500 mt-1 font-medium">
                 Leave empty to auto-detect localhost. For multiple office computers, enter the server's LAN or internet address.
-              </p>
-            </div>
-
-            <div className="sm:col-span-2 pt-4 border-t border-white/10">
-              <p className="text-xs font-black text-gray-800 dark:text-white uppercase tracking-widest mb-3">Africa's Talking SMS Configuration</p>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-black text-indigo-950/80 dark:text-zinc-400 uppercase tracking-wider mb-1.5">AT Username</label>
-              <input
-                type="text"
-                value={settAfricasTalkingUsername}
-                onChange={(e) => setSettAfricasTalkingUsername(e.target.value)}
-                placeholder="e.g. Printopia"
-                className="w-full glass-input rounded-xl px-3.5 py-2.5 text-xs text-gray-900 dark:text-white font-semibold"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-black text-indigo-950/80 dark:text-zinc-400 uppercase tracking-wider mb-1.5">AT API Key</label>
-              <input
-                type="password"
-                value={settAfricasTalkingApiKey}
-                onChange={(e) => setSettAfricasTalkingApiKey(e.target.value)}
-                placeholder="Paste your Africa's Talking API key"
-                className="w-full glass-input rounded-xl px-3.5 py-2.5 text-xs text-gray-900 dark:text-white font-semibold"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="block text-[10px] font-black text-indigo-950/80 dark:text-zinc-400 uppercase tracking-wider mb-1.5">Sender ID</label>
-              <input
-                type="text"
-                value={settAfricasTalkingSenderId}
-                onChange={(e) => setSettAfricasTalkingSenderId(e.target.value)}
-                placeholder="e.g. Printopia"
-                className="w-full glass-input rounded-xl px-3.5 py-2.5 text-xs text-gray-900 dark:text-white font-semibold"
-              />
-              <p className="text-[9px] text-gray-400 dark:text-zinc-500 mt-1 font-medium">
-                Get your credentials from dashboard.africastalking.com
               </p>
             </div>
 
@@ -5742,8 +5422,8 @@ export default function AdminDashboard({
 
             <div className="glass-panel rounded-2xl p-6 space-y-3 relative overflow-hidden paper-texture shadow-xl">
               <div className="cmyk-bar absolute top-0 left-0 right-0 h-[3px]" />
-              <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">SMS Broadcast</h3>
-              <p className="text-xs text-gray-600 dark:text-zinc-300 leading-relaxed">Send text messages to clients or staff in bulk. Use this to notify clients that their job is ready, send payment reminders, or announce shop updates. Requires an Africa's Talking account to work.</p>
+              <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Live Activity & Notifications</h3>
+              <p className="text-xs text-gray-600 dark:text-zinc-300 leading-relaxed">Watch every action across connected devices in real time on the Staff Activity tab. The system notifies you instantly when a job is deleted or a shift report is submitted, and all events are written to the immutable Audit Log.</p>
             </div>
 
             <div className="glass-panel rounded-2xl p-6 space-y-3 relative overflow-hidden paper-texture shadow-xl">

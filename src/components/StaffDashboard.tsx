@@ -48,7 +48,7 @@ import {
   ShieldCheck
 } from "lucide-react";
 import { DBStore } from "../dbStore";
-import { Job, GeneralPrintingOrder, DailyMiscellaneous, CompanySettings, KanbanStage, JobStatus, InventoryItem, StaffNote } from "../types";
+import { Job, GeneralPrintingOrder, DailyMiscellaneous, CompanySettings, KanbanStage, JobStatus, InventoryItem, StaffNote, DeletedJob } from "../types";
 
 interface StaffDashboardProps {
   settings: CompanySettings;
@@ -58,6 +58,54 @@ interface StaffDashboardProps {
   activeTab?: string;
   setActiveTab?: (tab: any) => void;
   refreshTrigger?: number;
+}
+
+// Small panel showing jobs deleted today (for the End-of-Day report).
+function DeletedJobsPanel({ userName, currency, now }: { userName?: string; currency: string; now: Date }) {
+  const todayStr = now.toISOString().split("T")[0];
+  const [list, setList] = useState<DeletedJob[]>(() => DBStore.getDeletedJobs());
+  const [justDeleted, setJustDeleted] = useState(false);
+
+  useEffect(() => {
+    const handler = () => { setList(DBStore.getDeletedJobs()); setJustDeleted(true); setTimeout(() => setJustDeleted(false), 500); };
+    window.addEventListener("printopia-sync", handler);
+    return () => window.removeEventListener("printopia-sync", handler);
+  }, []);
+
+  const todays = list.filter(d => d.timestamp.split("T")[0] === todayStr);
+  const totalRefund = todays.reduce((s, d) => s + (d.refundAmount || 0), 0);
+
+  return (
+    <div className="rounded-2xl bg-rose-500/5 dark:bg-rose-500/10 border border-rose-500/20 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-black text-gray-600 dark:text-zinc-300 uppercase tracking-wider">
+          {todays.length} job(s) deleted today
+        </span>
+        <span className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-wider">
+          Total Refunded: {currency} {totalRefund.toFixed(2)}
+        </span>
+      </div>
+      {todays.length === 0 ? (
+        <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium">No jobs were deleted today.</p>
+      ) : (
+        <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+          {todays.map(d => (
+            <div key={d.id} className={`flex justify-between items-center text-[11px] bg-white/40 dark:bg-zinc-900/30 border border-white/5 rounded-lg px-3 py-1.5 ${justDeleted ? "ring-1 ring-rose-400/40" : ""}`}>
+              <span className="font-bold text-gray-800 dark:text-zinc-200">
+                {d.jobNumber} · {d.customerName} <span className="text-gray-400 font-normal">— deleted by {d.deletedBy}</span>
+              </span>
+              <span className="font-black text-rose-600 dark:text-rose-400">
+                Refund {currency} {(d.refundAmount || 0).toFixed(2)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="text-[9px] text-gray-400 dark:text-zinc-500 font-medium">
+        These deletions are logged and will appear in the Admin's End-of-Day & Monthly reports.
+      </p>
+    </div>
+  );
 }
 
 export default function StaffDashboard({
@@ -637,19 +685,17 @@ export default function StaffDashboard({
   const [gpPaymentMethod, setGpPaymentMethod] = useState<"Mobile Money" | "Cash" | "Bank Transfer" | "POS">("Cash");
   const [gpDiscount, setGpDiscount] = useState(0);
 
-  // Photocopy
-  const [gpPhotoColored, setGpPhotoColored] = useState(false);
-  const [gpPhotoBW, setGpPhotoBW] = useState(false);
-  const [gpPhotoCustom, setGpPhotoCustom] = useState(false);
-  const [gpPhotoQty, setGpPhotoQty] = useState(0);
-  const [gpPhotoPrice, setGpPhotoPrice] = useState(0.50);
+  // Photocopy — supports multiple line items in one category (e.g. 3 B&W + 2 Colored)
+  const [gpPhotoLines, setGpPhotoLines] = useState<Array<{ id: string; type: "Colored" | "Black & White" | "Custom"; quantity: number; unitPrice: number }>>([
+    { id: `ph-${Date.now()}-bw`, type: "Black & White", quantity: 0, unitPrice: 0.50 },
+    { id: `ph-${Date.now()}-c`, type: "Colored", quantity: 0, unitPrice: 2.00 }
+  ]);
 
-  // Printing
-  const [gpPrintColored, setGpPrintColored] = useState(false);
-  const [gpPrintBW, setGpPrintBW] = useState(false);
-  const [gpPrintCustom, setGpPrintCustom] = useState(false);
-  const [gpPrintQty, setGpPrintQty] = useState(0);
-  const [gpPrintPrice, setGpPrintPrice] = useState(1.00);
+  // Printing — supports multiple line items in one category
+  const [gpPrintLines, setGpPrintLines] = useState<Array<{ id: string; type: "Colored" | "Black & White" | "Custom"; quantity: number; unitPrice: number }>>([
+    { id: `pr-${Date.now()}-bw`, type: "Black & White", quantity: 0, unitPrice: 1.00 },
+    { id: `pr-${Date.now()}-c`, type: "Colored", quantity: 0, unitPrice: 3.00 }
+  ]);
 
   // Frames
   const [gpFrameSize, setGpFrameSize] = useState("A4");
@@ -696,7 +742,21 @@ export default function StaffDashboard({
     DBStore.addNotification("service_added", `Service Added: "${newService.description}" (Qty: ${newService.quantity}) - ${currency} ${newService.amount.toFixed(2)}`);
     DBStore.broadcastLiveActivity(activeUserName, "Add", "Special Service", `Added service: ${newService.description}`);
     onRefreshGlobalState();
-    alert(`Service Added Successfully!\n\nService: ${newService.description}\nQty: ${newService.quantity}\nAmount: ${currency} ${newService.amount.toFixed(2)}\n\nClick "Generate Receipt" when done to print the full receipt.`);
+    alert(`Service Added Successfully!\n\nService: ${newService.description}\nQty: ${newService.quantity}\nAmount: ${currency} ${newService.amount.toFixed(2)}\n\nA receipt is now opening for this service.`);
+    const now = new Date();
+    onOpenDocument("receipt", {
+      id: `srv-${now.getTime()}`,
+      receiptNumber: `REC-${now.toISOString().split("T")[0].replace(/-/g, "")}-${now.getTime().toString().slice(-4)}`,
+      customerName: gpCustomer && gpCustomer.trim() ? gpCustomer : "Walk-In",
+      date: now.toISOString().split("T")[0],
+      items: [{ description: newService.description, total: newService.amount }],
+      grandTotal: newService.amount,
+      paymentAmount: newService.amount,
+      balance: 0,
+      cashier: activeUserName,
+      barcodeData: newService.description,
+      qrCodeData: `${newService.description}|${newService.amount}`
+    });
   };
 
   const removeGpSpecialService = (idx: number) => {
@@ -705,8 +765,8 @@ export default function StaffDashboard({
 
   // General Printing Calculations
   const gpCalculations = useMemo(() => {
-    const photoAmt = (gpPhotoColored || gpPhotoBW || gpPhotoCustom) ? gpPhotoQty * gpPhotoPrice : 0;
-    const printAmt = (gpPrintColored || gpPrintBW || gpPrintCustom) ? gpPrintQty * gpPrintPrice : 0;
+    const photoAmt = gpPhotoLines.reduce((sum, l) => sum + (l.quantity * l.unitPrice), 0);
+    const printAmt = gpPrintLines.reduce((sum, l) => sum + (l.quantity * l.unitPrice), 0);
     const frameAmt = gpFrameQty * gpFramePrice;
     const shirtAmt = gpShirtCat ? gpShirtQty * gpShirtPrice : 0;
     const stickAmt = gpStickQty * gpStickPrice;
@@ -734,8 +794,7 @@ export default function StaffDashboard({
       grandTotal
     };
   }, [
-    gpPhotoColored, gpPhotoBW, gpPhotoCustom, gpPhotoQty, gpPhotoPrice,
-    gpPrintColored, gpPrintBW, gpPrintCustom, gpPrintQty, gpPrintPrice,
+    gpPhotoLines, gpPrintLines,
     gpFrameQty, gpFramePrice, gpShirtCat, gpShirtQty, gpShirtPrice,
     gpStickQty, gpStickPrice, gpBannerQty, gpBannerPrice,
     gpDtfA3Qty, gpDtfA3Price, gpDtfA4Qty, gpDtfA4Price,
@@ -757,20 +816,22 @@ export default function StaffDashboard({
       customerName: gpCustomer,
       customerPhone: gpPhone || "Walk-In",
       photocopy: {
-        colored: gpPhotoColored,
-        blackAndWhite: gpPhotoBW,
-        custom: gpPhotoCustom,
-        quantity: gpPhotoQty,
-        unitPrice: gpPhotoPrice,
-        amount: gpCalculations.photoAmt
+        colored: gpPhotoLines.some(l => l.type === "Colored" && l.quantity > 0),
+        blackAndWhite: gpPhotoLines.some(l => l.type === "Black & White" && l.quantity > 0),
+        custom: gpPhotoLines.some(l => l.type === "Custom" && l.quantity > 0),
+        quantity: gpPhotoLines.reduce((s, l) => s + l.quantity, 0),
+        unitPrice: gpPhotoLines.length ? gpPhotoLines[0].unitPrice : 0.50,
+        amount: gpCalculations.photoAmt,
+        lines: gpPhotoLines.filter(l => l.quantity > 0).map(l => ({ id: l.id, type: l.type, quantity: l.quantity, unitPrice: l.unitPrice }))
       },
       printing: {
-        colored: gpPrintColored,
-        blackAndWhite: gpPrintBW,
-        custom: gpPrintCustom,
-        quantity: gpPrintQty,
-        unitPrice: gpPrintPrice,
-        amount: gpCalculations.printAmt
+        colored: gpPrintLines.some(l => l.type === "Colored" && l.quantity > 0),
+        blackAndWhite: gpPrintLines.some(l => l.type === "Black & White" && l.quantity > 0),
+        custom: gpPrintLines.some(l => l.type === "Custom" && l.quantity > 0),
+        quantity: gpPrintLines.reduce((s, l) => s + l.quantity, 0),
+        unitPrice: gpPrintLines.length ? gpPrintLines[0].unitPrice : 1.00,
+        amount: gpCalculations.printAmt,
+        lines: gpPrintLines.filter(l => l.quantity > 0).map(l => ({ id: l.id, type: l.type, quantity: l.quantity, unitPrice: l.unitPrice }))
       },
       frame: {
         size: gpFrameSize === "Custom / Other" ? gpFrameCustomSize || "Custom Size" : gpFrameSize,
@@ -841,15 +902,15 @@ export default function StaffDashboard({
     setGpPaymentMethod("Cash");
     setGpDiscount(0);
 
-    setGpPhotoColored(false);
-    setGpPhotoBW(false);
-    setGpPhotoCustom(false);
-    setGpPhotoQty(0);
+    setGpPhotoLines([
+      { id: `ph-${Date.now()}-bw`, type: "Black & White", quantity: 0, unitPrice: 0.50 },
+      { id: `ph-${Date.now()}-c`, type: "Colored", quantity: 0, unitPrice: 2.00 }
+    ]);
 
-    setGpPrintColored(false);
-    setGpPrintBW(false);
-    setGpPrintCustom(false);
-    setGpPrintQty(0);
+    setGpPrintLines([
+      { id: `pr-${Date.now()}-bw`, type: "Black & White", quantity: 0, unitPrice: 1.00 },
+      { id: `pr-${Date.now()}-c`, type: "Colored", quantity: 0, unitPrice: 3.00 }
+    ]);
 
     setGpFrameSize("A4");
     setGpFrameCustomSize("");
@@ -2670,6 +2731,60 @@ export default function StaffDashboard({
             </div>
           </div>
 
+          {/* Outstanding Installments (jobs not fully paid) */}
+          <div className="glass-panel rounded-2xl p-6 relative overflow-hidden paper-texture shadow-xl">
+            <div className="cmyk-bar absolute top-0 left-0 right-0 h-[3px]" />
+            <div className="flex justify-between items-center mb-3">
+              <h4 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                <CircleDollarSign className="h-4 w-4 text-amber-500" />
+                Outstanding Installments ({jobs.filter(j => (j.balance || 0) > 0).length})
+              </h4>
+              <span className="text-[9px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-wider">
+                Total Unpaid: {currency} {jobs.filter(j => (j.balance || 0) > 0).reduce((s, j) => s + (j.balance || 0), 0).toFixed(2)}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              {jobs.filter(j => (j.balance || 0) > 0).length === 0 ? (
+                <p className="text-[11px] text-gray-400 dark:text-zinc-500 font-medium py-3">All jobs are fully paid. No outstanding installments.</p>
+              ) : (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10 text-gray-400 font-bold uppercase tracking-widest text-[9px]">
+                      <th className="py-2.5">Job No.</th>
+                      <th className="py-2.5">Customer</th>
+                      <th className="py-2.5 text-right">Total</th>
+                      <th className="py-2.5 text-right">Paid</th>
+                      <th className="py-2.5 text-right">Balance</th>
+                      <th className="py-2.5 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {jobs
+                      .filter(j => (j.balance || 0) > 0)
+                      .sort((a, b) => (b.balance || 0) - (a.balance || 0))
+                      .map(job => (
+                        <tr key={job.id} className="border-b border-white/5 hover:bg-white/5 transition-colors duration-150">
+                          <td className="py-2.5 font-mono text-[10px] font-black text-gray-800 dark:text-zinc-200">{job.jobNumber}</td>
+                          <td className="py-2.5 font-bold text-gray-800 dark:text-zinc-200">{job.customerName}</td>
+                          <td className="py-2.5 text-right font-semibold">{currency} {job.totalAmount.toFixed(2)}</td>
+                          <td className="py-2.5 text-right font-semibold text-emerald-600 dark:text-emerald-400">{currency} {job.depositPaid.toFixed(2)}</td>
+                          <td className="py-2.5 text-right font-black text-rose-500">{currency} {job.balance.toFixed(2)}</td>
+                          <td className="py-2.5 text-center">
+                            <button
+                              onClick={() => setSelectedPaymentJob(job)}
+                              className="inline-flex items-center gap-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black px-3 py-1.5 rounded-lg text-[10px] shadow-md shadow-emerald-500/20 cursor-pointer transition-all uppercase tracking-wider active:scale-95"
+                            >
+                              <CircleDollarSign className="h-3 w-3" /> Record Pay
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
           {/* Quick Active Jobs Table */}
           <div className="glass-panel rounded-2xl p-6 overflow-x-auto shadow-xl relative overflow-hidden paper-texture">
             {/* Top CMYK Accent Bar */}
@@ -2837,32 +2952,50 @@ export default function StaffDashboard({
               <div className="p-5 rounded-2xl bg-white/5 dark:bg-zinc-900/15 border border-white/10 space-y-4">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                   <h4 className="text-xs font-black text-gray-950 dark:text-white uppercase tracking-wider">A. Photocopy Service</h4>
-                  <div className="flex flex-wrap gap-3">
-                    <label className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-700 dark:text-zinc-300 cursor-pointer">
-                      <input type="checkbox" checked={gpPhotoColored} onChange={(e) => { setGpPhotoColored(e.target.checked); if (e.target.checked) setGpPhotoPrice(2.00); }} className="rounded border-white/10 bg-white/5 h-4 w-4 text-blue-500" /> Colored
-                    </label>
-                    <label className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-700 dark:text-zinc-300 cursor-pointer">
-                      <input type="checkbox" checked={gpPhotoBW} onChange={(e) => { setGpPhotoBW(e.target.checked); if (e.target.checked) setGpPhotoPrice(0.50); }} className="rounded border-white/10 bg-white/5 h-4 w-4 text-blue-500" /> Black & White
-                    </label>
-                    <label className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-700 dark:text-zinc-300 cursor-pointer">
-                      <input type="checkbox" checked={gpPhotoCustom} onChange={(e) => { setGpPhotoCustom(e.target.checked); if (e.target.checked) setGpPhotoPrice(1.50); }} className="rounded border-white/10 bg-white/5 h-4 w-4 text-blue-500" /> Custom
-                    </label>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setGpPhotoLines([...gpPhotoLines, { id: `ph-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, type: "Custom", quantity: 0, unitPrice: 1.50 }])}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 hover:bg-white/20 text-[10px] font-black text-indigo-700 dark:text-indigo-300 px-2.5 py-1.5 cursor-pointer transition uppercase tracking-wider"
+                  >
+                    <PlusCircle className="h-3.5 w-3.5" /> Add Line
+                  </button>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Quantity</label>
-                    <input type="number" min="0" value={gpPhotoQty || ""} onChange={(e) => setGpPhotoQty(Math.max(0, parseInt(e.target.value) || 0))} className="glass-input w-full" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Unit Price ({currency})</label>
-                    <input type="number" step="0.01" min="0" value={gpPhotoPrice || ""} onChange={(e) => setGpPhotoPrice(Math.max(0, parseFloat(e.target.value) || 0))} className="glass-input w-full" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Total Amount</label>
-                    <div className="w-full bg-white/5 dark:bg-zinc-950/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-black text-gray-800 dark:text-zinc-200">
-                      {currency} {gpCalculations.photoAmt.toFixed(2)}
+                <div className="space-y-3">
+                  {gpPhotoLines.map((line, idx) => (
+                    <div key={line.id} className="grid grid-cols-12 gap-2 items-end">
+                      <div className="col-span-4">
+                        <label className="block text-[9px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">Type</label>
+                        <select
+                          value={line.type}
+                          onChange={(e) => setGpPhotoLines(gpPhotoLines.map((l, i) => i === idx ? { ...l, type: e.target.value as any } : l))}
+                          className="glass-input w-full bg-transparent text-xs"
+                        >
+                          <option value="Black & White">Black & White</option>
+                          <option value="Colored">Colored</option>
+                          <option value="Custom">Custom</option>
+                        </select>
+                      </div>
+                      <div className="col-span-3">
+                        <label className="block text-[9px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">Qty</label>
+                        <input type="number" min="0" value={line.quantity || ""} onChange={(e) => setGpPhotoLines(gpPhotoLines.map((l, i) => i === idx ? { ...l, quantity: Math.max(0, parseInt(e.target.value) || 0) } : l))} className="glass-input w-full text-xs" />
+                      </div>
+                      <div className="col-span-3">
+                        <label className="block text-[9px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">Unit ({currency})</label>
+                        <input type="number" step="0.01" min="0" value={line.unitPrice || ""} onChange={(e) => setGpPhotoLines(gpPhotoLines.map((l, i) => i === idx ? { ...l, unitPrice: Math.max(0, parseFloat(e.target.value) || 0) } : l))} className="glass-input w-full text-xs" />
+                      </div>
+                      <div className="col-span-2 flex items-center gap-1">
+                        <div className="w-full bg-white/5 dark:bg-zinc-950/40 border border-white/10 rounded-xl px-2 py-2 text-[11px] font-black text-gray-800 dark:text-zinc-200">
+                          {(line.quantity * line.unitPrice).toFixed(2)}
+                        </div>
+                        {gpPhotoLines.length > 1 && (
+                          <button type="button" onClick={() => setGpPhotoLines(gpPhotoLines.filter((_, i) => i !== idx))} className="p-1 rounded-lg bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 cursor-pointer shrink-0" title="Remove line"><X className="h-3.5 w-3.5" /></button>
+                        )}
+                      </div>
                     </div>
+                  ))}
+                  <div className="flex justify-between items-center pt-1 border-t border-white/5">
+                    <span className="text-[10px] font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Photocopy Total</span>
+                    <span className="text-xs font-black text-gray-900 dark:text-white">{currency} {gpCalculations.photoAmt.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -2871,32 +3004,50 @@ export default function StaffDashboard({
               <div className="p-5 rounded-2xl bg-white/5 dark:bg-zinc-900/15 border border-white/10 space-y-4">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                   <h4 className="text-xs font-black text-gray-950 dark:text-white uppercase tracking-wider">B. Digital Printing Run</h4>
-                  <div className="flex flex-wrap gap-3">
-                    <label className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-700 dark:text-zinc-300 cursor-pointer">
-                      <input type="checkbox" checked={gpPrintColored} onChange={(e) => { setGpPrintColored(e.target.checked); if (e.target.checked) setGpPrintPrice(3.00); }} className="rounded border-white/10 bg-white/5 h-4 w-4 text-orange-500" /> Colored
-                    </label>
-                    <label className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-700 dark:text-zinc-300 cursor-pointer">
-                      <input type="checkbox" checked={gpPrintBW} onChange={(e) => { setGpPrintBW(e.target.checked); if (e.target.checked) setGpPrintPrice(1.00); }} className="rounded border-white/10 bg-white/5 h-4 w-4 text-orange-500" /> Black & White
-                    </label>
-                    <label className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-700 dark:text-zinc-300 cursor-pointer">
-                      <input type="checkbox" checked={gpPrintCustom} onChange={(e) => { setGpPrintCustom(e.target.checked); if (e.target.checked) setGpPrintPrice(2.50); }} className="rounded border-white/10 bg-white/5 h-4 w-4 text-orange-500" /> Custom
-                    </label>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setGpPrintLines([...gpPrintLines, { id: `pr-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, type: "Custom", quantity: 0, unitPrice: 2.50 }])}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 hover:bg-white/20 text-[10px] font-black text-orange-700 dark:text-orange-300 px-2.5 py-1.5 cursor-pointer transition uppercase tracking-wider"
+                  >
+                    <PlusCircle className="h-3.5 w-3.5" /> Add Line
+                  </button>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Quantity</label>
-                    <input type="number" min="0" value={gpPrintQty || ""} onChange={(e) => setGpPrintQty(Math.max(0, parseInt(e.target.value) || 0))} className="glass-input w-full" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Unit Price ({currency})</label>
-                    <input type="number" step="0.01" min="0" value={gpPrintPrice || ""} onChange={(e) => setGpPrintPrice(Math.max(0, parseFloat(e.target.value) || 0))} className="glass-input w-full" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Total Amount</label>
-                    <div className="w-full bg-white/5 dark:bg-zinc-950/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-black text-gray-800 dark:text-zinc-200">
-                      {currency} {gpCalculations.printAmt.toFixed(2)}
+                <div className="space-y-3">
+                  {gpPrintLines.map((line, idx) => (
+                    <div key={line.id} className="grid grid-cols-12 gap-2 items-end">
+                      <div className="col-span-4">
+                        <label className="block text-[9px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">Type</label>
+                        <select
+                          value={line.type}
+                          onChange={(e) => setGpPrintLines(gpPrintLines.map((l, i) => i === idx ? { ...l, type: e.target.value as any } : l))}
+                          className="glass-input w-full bg-transparent text-xs"
+                        >
+                          <option value="Black & White">Black & White</option>
+                          <option value="Colored">Colored</option>
+                          <option value="Custom">Custom</option>
+                        </select>
+                      </div>
+                      <div className="col-span-3">
+                        <label className="block text-[9px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">Qty</label>
+                        <input type="number" min="0" value={line.quantity || ""} onChange={(e) => setGpPrintLines(gpPrintLines.map((l, i) => i === idx ? { ...l, quantity: Math.max(0, parseInt(e.target.value) || 0) } : l))} className="glass-input w-full text-xs" />
+                      </div>
+                      <div className="col-span-3">
+                        <label className="block text-[9px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">Unit ({currency})</label>
+                        <input type="number" step="0.01" min="0" value={line.unitPrice || ""} onChange={(e) => setGpPrintLines(gpPrintLines.map((l, i) => i === idx ? { ...l, unitPrice: Math.max(0, parseFloat(e.target.value) || 0) } : l))} className="glass-input w-full text-xs" />
+                      </div>
+                      <div className="col-span-2 flex items-center gap-1">
+                        <div className="w-full bg-white/5 dark:bg-zinc-950/40 border border-white/10 rounded-xl px-2 py-2 text-[11px] font-black text-gray-800 dark:text-zinc-200">
+                          {(line.quantity * line.unitPrice).toFixed(2)}
+                        </div>
+                        {gpPrintLines.length > 1 && (
+                          <button type="button" onClick={() => setGpPrintLines(gpPrintLines.filter((_, i) => i !== idx))} className="p-1 rounded-lg bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 cursor-pointer shrink-0" title="Remove line"><X className="h-3.5 w-3.5" /></button>
+                        )}
+                      </div>
                     </div>
+                  ))}
+                  <div className="flex justify-between items-center pt-1 border-t border-white/5">
+                    <span className="text-[10px] font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Printing Total</span>
+                    <span className="text-xs font-black text-gray-900 dark:text-white">{currency} {gpCalculations.printAmt.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -3532,12 +3683,22 @@ export default function StaffDashboard({
                                     </>
                                   )}
                                   <button
-                                    onClick={() => setSelectedPaymentJob(job)}
-                                    title="Record Installments & View History"
-                                    className="px-2 py-1 rounded-xl hover:bg-emerald-500/10 text-emerald-500 cursor-pointer flex items-center gap-1 text-[9px] font-black border border-emerald-500/20 bg-emerald-500/5 transition-all duration-200"
+                                    onClick={() => {
+                                      const jobTotal = job.totalAmount || 0;
+                                      const paid = job.depositPaid || 0;
+                                      if (!window.confirm(`Delete job ${job.jobNumber} for ${job.customerName}?\n\nThis cannot be undone. The admin will be notified in the End-of-Day report.`)) return;
+                                      const refundInput = window.prompt(`Refund amount for ${job.jobNumber} (max ${settings.currency} ${paid.toFixed(2)} already paid):`, paid > 0 ? paid.toFixed(2) : "0");
+                                      if (refundInput === null) return;
+                                      const refund = Math.max(0, Math.min(paid, parseFloat(refundInput) || 0));
+                                      DBStore.deleteJob(job.id, activeUserName, refund);
+                                      onRefreshGlobalState();
+                                      alert(`Job ${job.jobNumber} deleted by ${activeUserName}.${refund > 0 ? ` Refund of ${settings.currency} ${refund.toFixed(2)} recorded.` : ""} The admin has been notified for the End-of-Day report.`);
+                                    }}
+                                    title="Delete job / issue refund"
+                                    className="px-2 py-1 rounded-xl hover:bg-rose-500/10 text-rose-500 cursor-pointer flex items-center gap-1 text-[9px] font-black border border-rose-500/20 bg-rose-500/5 transition-all duration-200"
                                   >
-                                    <CircleDollarSign className="h-3 w-3" />
-                                    <span>Record Pay</span>
+                                    <Trash2 className="h-3 w-3" />
+                                    <span>Delete / Refund</span>
                                   </button>
                                 </div>
 
@@ -3766,6 +3927,14 @@ export default function StaffDashboard({
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Deleted Jobs / Refunds (EOD visibility) */}
+            <div className="sm:col-span-2 space-y-3 pt-4 border-t border-white/10">
+              <h4 className="text-xs font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" /> Jobs Deleted Today (Refunds)
+              </h4>
+              <DeletedJobsPanel userName={activeUserName} currency={currency} now={new Date()} />
             </div>
 
             {/* Footer comments and shift selection */}
