@@ -29,8 +29,9 @@ create policy "Allow all" on public.live_activity for all using (true) with chec
 -- Enable real-time replication
 alter table public.app_state replica identity full;
 alter table public.live_activity replica identity full;
-alter publication supabase_realtime add table public.app_state;
-alter publication supabase_realtime add table public.live_activity;
+
+alter publication supabase_realtime add table if not exists public.app_state;
+alter publication supabase_realtime add table if not exists public.live_activity;
 
 -- Seed rows for every app data key
 insert into public.app_state (key, data, version) values
