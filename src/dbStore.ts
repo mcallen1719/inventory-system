@@ -565,8 +565,18 @@ export const DBStore = {
       if (acc.id === "staff-2" && (acc.name === "Kojo Mensah" || acc.username === "kojo")) { updated = true; return { ...acc, name: "Staff 2", username: "staff2", passwordText: acc.passwordText === "kojo123" ? "staff456" : acc.passwordText }; }
       return acc;
     });
-    if (updated) setStored(KEYS.STAFF, migrated);
-    return migrated;
+
+    const defaultsMap = new Map(DEFAULT_STAFF_ACCOUNTS.map(a => [a.username, a]));
+    const merged = migrated.filter(a => !defaultsMap.has(a.username));
+    DEFAULT_STAFF_ACCOUNTS.forEach(def => {
+      if (!migrated.some(a => a.username === def.username)) {
+        merged.push(def);
+        updated = true;
+      }
+    });
+
+    if (updated) setStored(KEYS.STAFF, merged);
+    return merged;
   },
 
   saveStaffAccounts(accounts: StaffAccount[]) { setStored(KEYS.STAFF, accounts); },
