@@ -26,20 +26,6 @@ export default defineConfig(() => {
             },
           ],
         },
-            {
-              urlPattern: /\/api\/.*/,
-              handler: 'NetworkOnly',
-            },
-            {
-              urlPattern: /^https:\/\/.*$/,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'external-cache',
-                expiration: { maxEntries: 50, maxAgeSeconds: 7 * 24 * 60 * 60 },
-              },
-            },
-          ],
-        },
         manifest: {
           name: 'Printopia Digital Press',
           short_name: 'Printopia',
