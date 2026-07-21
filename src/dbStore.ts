@@ -44,7 +44,7 @@ const KEYS = {
 
 // Auto-clear demo mockup data on first load of this production release
 const CLEAR_DEMO_FLAG = "printing_db_is_live_v5";
-if (typeof window !== "undefined" && !localStorage.getItem(CLEAR_DEMO_FLAG)) {
+if (typeof window !== "undefined" && !localStorage.getItem(CLEAR_DEMO_FLAG) && !isSupabaseEnabled()) {
   localStorage.setItem(CLEAR_DEMO_FLAG, "true");
   localStorage.removeItem(KEYS.JOBS);
   localStorage.removeItem(KEYS.INVENTORY);
@@ -136,12 +136,6 @@ function getStored<T>(key: string, seed: T): T {
   const data = localStorage.getItem(key);
   if (!data) {
     localStorage.setItem(key, JSON.stringify(seed));
-    if (isSupabaseEnabled()) {
-      supabase!.from("app_state").upsert({ key, data: seed, version: 0 }).then(() => {
-        const event = new CustomEvent("printopia-sync", { detail: { key } });
-        window.dispatchEvent(event);
-      });
-    }
     return seed;
   }
   try { return JSON.parse(data) as T; } catch { return seed; }
@@ -163,10 +157,12 @@ async function initSupabaseSync() {
     if (error || !data) return;
     let updated = false;
     for (const row of data) {
-      if (!localStorage.getItem(row.key)) {
+      const localVersion = Number(localStorage.getItem(`__v_${row.key}`) || "0");
+      const remoteVersion = row.version || 0;
+      if (remoteVersion > localVersion || !localStorage.getItem(row.key)) {
         localStorage.setItem(row.key, JSON.stringify(row.data));
+        if (remoteVersion) { try { localStorage.setItem(`__v_${row.key}`, String(remoteVersion)); } catch { /* ignore */ } }
         updated = true;
-        if (row.version) { try { localStorage.setItem(`__v_${row.key}`, String(row.version)); } catch { /* ignore */ } }
       }
     }
     if (updated) {
@@ -174,6 +170,18 @@ async function initSupabaseSync() {
       window.dispatchEvent(event);
     }
   } catch (err) { console.error("Failed to init from Supabase:", err); }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("Supabase init timeout")), ms))
+  ]);
+}
+
+if (typeof window !== "undefined") {
+  withTimeout(initSupabaseSync(), 8000).catch(() => {});
+  subscribeToSupabase();
 }
 
 function subscribeToSupabase() {
