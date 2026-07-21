@@ -558,25 +558,26 @@ export const DBStore = {
   },
 
   getStaffAccounts(): StaffAccount[] {
-    const accounts = getStored<StaffAccount[]>(KEYS.STAFF, DEFAULT_STAFF_ACCOUNTS);
+    const stored = getStored<StaffAccount[]>(KEYS.STAFF, []);
     let updated = false;
-    const migrated = accounts.map(acc => {
+
+    const migrated = stored.map(acc => {
       if (acc.id === "staff-1" && (acc.name === "Selasie Boateng" || acc.username === "selasie")) { updated = true; return { ...acc, name: "Staff 1", username: "staff1", passwordText: acc.passwordText === "selasie123" ? "staff123" : acc.passwordText }; }
       if (acc.id === "staff-2" && (acc.name === "Kojo Mensah" || acc.username === "kojo")) { updated = true; return { ...acc, name: "Staff 2", username: "staff2", passwordText: acc.passwordText === "kojo123" ? "staff456" : acc.passwordText }; }
       return acc;
     });
 
-    const defaultsMap = new Map(DEFAULT_STAFF_ACCOUNTS.map(a => [a.username, a]));
-    const merged = migrated.filter(a => !defaultsMap.has(a.username));
+    const existingIds = new Set(migrated.map(a => a.id));
+    const result = [...migrated];
     DEFAULT_STAFF_ACCOUNTS.forEach(def => {
-      if (!migrated.some(a => a.username === def.username)) {
-        merged.push(def);
+      if (!existingIds.has(def.id)) {
+        result.push(def);
         updated = true;
       }
     });
 
-    if (updated) setStored(KEYS.STAFF, merged);
-    return merged;
+    if (updated) setStored(KEYS.STAFF, result);
+    return result.length ? result : DEFAULT_STAFF_ACCOUNTS;
   },
 
   saveStaffAccounts(accounts: StaffAccount[]) { setStored(KEYS.STAFF, accounts); },
