@@ -2264,6 +2264,13 @@ export default function AdminDashboard({
   const [resetModalConfirmPassword, setResetModalConfirmPassword] = useState("");
   const [resetModalShowPassword, setResetModalShowPassword] = useState(false);
 
+  // Admin Profile States
+  const adminProfile = DBStore.getAdminAccount();
+  const [adminName, setAdminName] = useState(adminProfile?.name || "Isaah Boadu Jnr");
+  const [adminUser, setAdminUser] = useState(adminProfile?.username || "admin");
+  const [adminPass, setAdminPass] = useState(adminProfile?.passwordText || "");
+  const [adminConfirmPass, setAdminConfirmPass] = useState("");
+
   // Late Arrival Notes State
   const [lateNoteStaffId, setLateNoteStaffId] = useState<"staff-1" | "staff-2">("staff-1");
   const [lateNoteDate, setLateNoteDate] = useState(() => new Date().toISOString().split("T")[0]);
@@ -2523,6 +2530,30 @@ export default function AdminDashboard({
     setNewStaffPassword("");
     onRefreshGlobalState();
     alert(`Successfully changed password for ${selectedStaffId === "staff-1" ? (staff1Name || "Staff Member 1") : (staff2Name || "Staff Member 2")} to: ${selectedStaffId === "staff-1" ? currentStaff1Pass : currentStaff2Pass}`);
+  };
+
+  const handleSaveAdminProfile = () => {
+    if (!adminName.trim() || !adminUser.trim() || !adminPass.trim()) {
+      alert("Error: Please provide a display name, username, and password for the admin account!");
+      return;
+    }
+    if (adminPass.trim().length < 4) {
+      alert("Security Alert: The password must be at least 4 characters long.");
+      return;
+    }
+    if (adminPass.trim() !== adminConfirmPass.trim()) {
+      alert("Error: Password and confirm password do not match.");
+      return;
+    }
+    DBStore.saveAdminAccount({
+      name: adminName.trim(),
+      username: adminUser.trim().toLowerCase(),
+      passwordText: adminPass.trim()
+    });
+    DBStore.addAuditLog("Admin", "Edit", "Auth", `Updated own admin credentials: username "${adminUser.trim().toLowerCase()}", display name "${adminName.trim()}".`);
+    onRefreshGlobalState();
+    setAdminConfirmPass("");
+    alert("Admin profile updated successfully! Use your new credentials on your next login.");
   };
 
   const handleSaveSettings = () => {
@@ -4757,6 +4788,68 @@ export default function AdminDashboard({
                   </div>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* Admin Profile Section */}
+            <div className="space-y-4 pt-4 border-t border-white/10">
+              <h4 className="text-xs font-black text-indigo-950 dark:text-indigo-200 uppercase tracking-wider">
+                My Admin Profile
+              </h4>
+              <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium">
+                Change your own login username and password. This affects how you sign in on every device.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-[9px] font-bold uppercase text-gray-400 dark:text-zinc-500 tracking-wider">Display Name</label>
+                  <input
+                    type="text"
+                    value={adminName}
+                    onChange={(e) => setAdminName(e.target.value)}
+                    placeholder="e.g. Isaah Boadu Jnr"
+                    className="w-full glass-input rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white font-semibold"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[9px] font-bold uppercase text-gray-400 dark:text-zinc-500 tracking-wider">Username (Login ID)</label>
+                  <input
+                    type="text"
+                    value={adminUser}
+                    onChange={(e) => setAdminUser(e.target.value)}
+                    placeholder="e.g. admin"
+                    className="w-full glass-input rounded-lg px-3 py-2 text-xs font-mono text-gray-900 dark:text-white font-semibold"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[9px] font-bold uppercase text-gray-400 dark:text-zinc-500 tracking-wider">New Password</label>
+                  <input
+                    type="text"
+                    value={adminPass}
+                    onChange={(e) => setAdminPass(e.target.value)}
+                    placeholder="Enter new password"
+                    className="w-full glass-input rounded-lg px-3 py-2 text-xs font-mono text-gray-900 dark:text-white font-semibold"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="block text-[9px] font-bold uppercase text-gray-400 dark:text-zinc-500 tracking-wider">Confirm Password</label>
+                  <input
+                    type="text"
+                    value={adminConfirmPass}
+                    onChange={(e) => setAdminConfirmPass(e.target.value)}
+                    placeholder="Re-type password to confirm"
+                    className="w-full glass-input rounded-lg px-3 py-2 text-xs font-mono text-gray-900 dark:text-white font-semibold"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={handleSaveAdminProfile}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-black py-3 text-xs shadow-md shadow-indigo-600/15 transition active:scale-95 cursor-pointer uppercase tracking-widest"
+                  >
+                    <CheckCircle className="h-4 w-4" /> Update Admin Login
+                  </button>
+                </div>
               </div>
             </div>
 

@@ -712,9 +712,11 @@ export default function StaffDashboard({
   const [gpStickSize, setGpStickSize] = useState("");
   const [gpStickQty, setGpStickQty] = useState(0);
   const [gpStickPrice, setGpStickPrice] = useState(15.00);
+  const [gpStickAmount, setGpStickAmount] = useState(0);
   const [gpBannerSize, setGpBannerSize] = useState("");
   const [gpBannerQty, setGpBannerQty] = useState(0);
   const [gpBannerPrice, setGpBannerPrice] = useState(25.00);
+  const [gpBannerAmount, setGpBannerAmount] = useState(0);
 
   // DTF
   const [gpDtfA3Qty, setGpDtfA3Qty] = useState(0);
@@ -769,8 +771,8 @@ export default function StaffDashboard({
     const printAmt = gpPrintLines.reduce((sum, l) => sum + (l.quantity * l.unitPrice), 0);
     const frameAmt = gpFrameQty * gpFramePrice;
     const shirtAmt = gpShirtCat ? gpShirtQty * gpShirtPrice : 0;
-    const stickAmt = gpStickQty * gpStickPrice;
-    const bannerAmt = gpBannerQty * gpBannerPrice;
+    const stickAmt = gpStickAmount > 0 ? gpStickAmount : gpStickQty * gpStickPrice;
+    const bannerAmt = gpBannerAmount > 0 ? gpBannerAmount : gpBannerQty * gpBannerPrice;
     const dtfA3Amt = gpDtfA3Qty * gpDtfA3Price;
     const dtfA4Amt = gpDtfA4Qty * gpDtfA4Price;
     const specialAmt = gpSpecialList.reduce((sum, item) => sum + item.amount, 0);
@@ -796,7 +798,7 @@ export default function StaffDashboard({
   }, [
     gpPhotoLines, gpPrintLines,
     gpFrameQty, gpFramePrice, gpShirtCat, gpShirtQty, gpShirtPrice,
-    gpStickQty, gpStickPrice, gpBannerQty, gpBannerPrice,
+    gpStickQty, gpStickPrice, gpStickAmount, gpBannerQty, gpBannerPrice, gpBannerAmount,
     gpDtfA3Qty, gpDtfA3Price, gpDtfA4Qty, gpDtfA4Price,
     gpSpecialList, gpDiscount, settings.vatRate
   ]);
@@ -921,9 +923,11 @@ export default function StaffDashboard({
 
     setGpStickSize("");
     setGpStickQty(0);
+    setGpStickAmount(0);
 
     setGpBannerSize("");
     setGpBannerQty(0);
+    setGpBannerAmount(0);
 
     setGpDtfA3Qty(0);
     setGpDtfA4Qty(0);
@@ -3141,8 +3145,8 @@ export default function StaffDashboard({
                     <div>
                       <input type="number" placeholder="Qty" value={gpStickQty || ""} onChange={(e) => setGpStickQty(Math.max(0, parseInt(e.target.value) || 0))} className="glass-input w-full" />
                     </div>
-                    <div className="w-full bg-white/5 dark:bg-zinc-950/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-black text-gray-800 dark:text-zinc-200 flex items-center">
-                      {currency} {gpCalculations.stickAmt.toFixed(2)}
+                    <div>
+                      <input type="number" step="0.01" placeholder="Amount" value={gpStickAmount || ""} onChange={(e) => setGpStickAmount(Math.max(0, parseFloat(e.target.value) || 0))} className="glass-input w-full" />
                     </div>
                   </div>
 
@@ -3155,8 +3159,8 @@ export default function StaffDashboard({
                     <div>
                       <input type="number" placeholder="Qty" value={gpBannerQty || ""} onChange={(e) => setGpBannerQty(Math.max(0, parseInt(e.target.value) || 0))} className="glass-input w-full" />
                     </div>
-                    <div className="w-full bg-white/5 dark:bg-zinc-950/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-black text-gray-800 dark:text-zinc-200 flex items-center">
-                      {currency} {gpCalculations.bannerAmt.toFixed(2)}
+                    <div>
+                      <input type="number" step="0.01" placeholder="Amount" value={gpBannerAmount || ""} onChange={(e) => setGpBannerAmount(Math.max(0, parseFloat(e.target.value) || 0))} className="glass-input w-full" />
                     </div>
                   </div>
                 </div>

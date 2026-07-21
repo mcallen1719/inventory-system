@@ -101,8 +101,6 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
     setTimeout(() => {
       const accounts = DBStore.getStaffAccounts();
 
-      // Match by username (or email-style aliases) and password. The staff
-      // account "name" is treated as their canonical terminal/display name.
       const match = accounts.find(acc => {
         const u = acc.username.toLowerCase();
         const isUser =
@@ -112,21 +110,27 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
         return isUser && passwordVal === acc.passwordText;
       });
 
-      const isA = inputVal === "isaah boadu jnr" || inputVal === "admin";
-      const adminPass = "zhaogangren04@";
-
-      if (isA && passwordVal === adminPass) {
-        setIsLoading(false);
-        setIsSuccess(true);
-        setTimeout(() => {
-          onLogin(UserRole.ADMIN, "Isaah Boadu Jnr");
-        }, 1000);
-      } else if (match) {
+      if (match) {
         setIsLoading(false);
         setIsSuccess(true);
         const terminalName = match.name && match.name.trim() ? match.name : match.username;
         setTimeout(() => {
           onLogin(UserRole.STAFF, terminalName);
+        }, 1000);
+        return;
+      }
+
+      const adminAccount = DBStore.getAdminAccount();
+      const adminUser = adminAccount ? adminAccount.username.toLowerCase() : "";
+      const adminPass = adminAccount ? adminAccount.passwordText : "zhaogangren04@";
+      const isA = inputVal === adminUser || inputVal === "isaah boadu jnr" || inputVal === "admin";
+
+      if (isA && passwordVal === adminPass) {
+        setIsLoading(false);
+        setIsSuccess(true);
+        const adminName = adminAccount ? adminAccount.name : "Isaah Boadu Jnr";
+        setTimeout(() => {
+          onLogin(UserRole.ADMIN, adminName);
         }, 1000);
       } else {
         clearTimeout(stageTimer1);

@@ -19,144 +19,10 @@ import {
   StaffNote,
   DeletedJob
 } from "./types";
-import { io } from "socket.io-client";
+import { supabase, isSupabaseEnabled } from "./supabaseClient";
 
-// Initialize socket connection to backend
-export let socket: ReturnType<typeof io> | null = null;
-let currentSocket: ReturnType<typeof io> | null = null;
-let currentSocketUrl = "";
-
-function getSyncServerUrl(settings?: CompanySettings): string {
-  try {
-    const pairingRaw = localStorage.getItem("printing_db_sync_pairing");
-    if (pairingRaw) {
-      const pairing = JSON.parse(pairingRaw);
-      if (pairing.serverUrl && pairing.serverUrl.trim().length > 0) {
-        return pairing.serverUrl.trim();
-      }
-    }
-  } catch {
-    // ignore
-  }
-  const configured = (settings || DBStore.getSettings()).syncServerUrl;
-  if (configured && configured.trim().length > 0) {
-    return configured.trim();
-  }
-  // Runtime config from public/config.json
-  try {
-    const runtime = (window as any).__PRINTOPIA_RUNTIME_CONFIG__;
-    if (runtime && runtime.backendUrl && runtime.backendUrl.trim().length > 0) {
-      return runtime.backendUrl.trim();
-    }
-  } catch {
-    // ignore
-  }
-  try {
-    const { protocol, hostname, port } = window.location;
-    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
-    if (isLocal && port && port !== "3001") {
-      return `${protocol}//${hostname}:3001`;
-    }
-  } catch {
-    // ignore
-  }
-  return window.location.origin;
-}
-
-function createSocket(url: string): ReturnType<typeof io> {
-  const socket = io(url, {
-    transports: ["websocket", "polling"],
-    reconnectionAttempts: 10,
-    reconnectionDelay: 1000,
-    timeout: 10000
-  });
-
-  socket.on("connect", () => {
-    console.log(`Sync server connected: ${url}`);
-  });
-
-  socket.on("disconnect", () => {
-    console.log(`Sync server disconnected: ${url}`);
-  });
-
-  socket.on("connect_error", (err) => {
-    console.error(`Sync server connection error: ${url}`, err.message);
-  });
-
-  socket.on("sync-init", (payload: any) => {
-    const cache = payload && payload.cache ? payload.cache : payload;
-    const version = payload && typeof payload.version === "number" ? payload.version : 0;
-    let updated = false;
-    for (const key in cache) {
-      if (key.startsWith("__v_")) continue;
-      localStorage.setItem(key, JSON.stringify(cache[key]));
-      updated = true;
-      try { localStorage.setItem(`__v_${key}`, String(version)); } catch { /* ignore */ }
-    }
-    if (updated) {
-      const event = new CustomEvent("printopia-sync", { detail: { key: "printing_db_init" } });
-      window.dispatchEvent(event);
-    }
-  });
-
-  socket.on("sync-update", ({ key, data, version }: { key: string, data: any, version?: number }) => {
-    // Never let an older value overwrite a newer one we already hold.
-    if (version !== undefined) {
-      const currentVersion = Number(localStorage.getItem(`__v_${key}`) || "0");
-      if (version < currentVersion) return;
-      try { localStorage.setItem(`__v_${key}`, String(version)); } catch { /* ignore */ }
-    }
-    localStorage.setItem(key, JSON.stringify(data));
-    const event = new CustomEvent("printopia-sync", { detail: { key } });
-    window.dispatchEvent(event);
-  });
-
-  socket.on("sync-clear", ({ keys, user }: { keys: string[], user: string }) => {
-    (keys || []).forEach((key) => {
-      if (key === "printing_db_staff_accounts" || key === "printing_db_settings") return;
-      localStorage.removeItem(key);
-      localStorage.removeItem(`__v_${key}`);
-    });
-    const event = new CustomEvent("printopia-sync", { detail: { key: "printing_db_init", clearedBy: user } });
-    window.dispatchEvent(event);
-  });
-
-  socket.on("live-activity", (activity: any) => {
-    const activities = getStored<any[]>(KEYS.LIVE_ACTIVITY, []);
-    activities.unshift(activity);
-    if (activities.length > 50) activities.pop();
-    localStorage.setItem(KEYS.LIVE_ACTIVITY, JSON.stringify(activities));
-    const event = new CustomEvent("printopia-sync", { detail: { key: KEYS.LIVE_ACTIVITY } });
-    window.dispatchEvent(event);
-  });
-
-  return socket;
-}
-
-function ensureSocket(settings?: CompanySettings) {
-  const url = getSyncServerUrl(settings);
-  if (!currentSocket || currentSocketUrl !== url) {
-    if (currentSocket) {
-      currentSocket.disconnect();
-    }
-    currentSocket = createSocket(url);
-    currentSocketUrl = url;
-    socket = currentSocket;
-  }
-  return currentSocket;
-}
-
-// Initial connection is deferred to the end of the file after DBStore initialization
-
-export function reconnectSocket(settings?: CompanySettings) {
-  const url = getSyncServerUrl(settings);
-  if (currentSocket) {
-    currentSocket.disconnect();
-  }
-  currentSocket = createSocket(url);
-  currentSocketUrl = url;
-  return currentSocket;
-}
+// Supabase real-time subscription handle
+let supabaseChannel: any = null;
 
 // Helper keys for LocalStorage
 const KEYS = {
@@ -193,26 +59,14 @@ if (typeof window !== "undefined" && !localStorage.getItem(CLEAR_DEMO_FLAG)) {
   localStorage.removeItem(KEYS.LIVE_ACTIVITY);
   localStorage.removeItem(KEYS.STAFF_NOTES);
   localStorage.removeItem(KEYS.STAFF_ATTENDANCE);
+  localStorage.removeItem(KEYS.DELETED_JOBS);
 }
 
 // Default Staff Accounts
 const DEFAULT_STAFF_ACCOUNTS: StaffAccount[] = [
-  {
-    id: "staff-1",
-    username: "staff1",
-    name: "Staff 1",
-    passwordText: "staff123",
-    roleDescription: ""
-  },
-  {
-    id: "staff-2",
-    username: "staff2",
-    name: "Staff 2",
-    passwordText: "staff456",
-    roleDescription: ""
-  }
+  { id: "staff-1", username: "staff1", name: "Staff 1", passwordText: "staff123", roleDescription: "" },
+  { id: "staff-2", username: "staff2", name: "Staff 2", passwordText: "staff456", roleDescription: "" }
 ];
-
 
 // Default Settings
 const DEFAULT_SETTINGS: CompanySettings = {
@@ -269,59 +123,99 @@ const SEED_INVENTORY: InventoryItem[] = [
   { id: "mat-35", item: "Sublimation Paper", category: "Paper", openingStock: 0, purchased: 0, used: 0, minimumStock: 30, alertLevel: 30, unitCost: 1.00, sellingPrice: 2.00, barcode: "8901001001036", qrCode: "QR-SUBPAPER", supplier: "Paper Mill Ltd", remainingStock: 0 }
 ];
 
-// Seed Jobs
 const SEED_JOBS: Job[] = [];
-
-// Seed GPO (General Printing Orders)
 const SEED_GPO: GeneralPrintingOrder[] = [];
-
-// Seed Expenditures (Admin logged)
 const SEED_EXPENDITURES: Expenditure[] = [];
-
-// Seed Daily Miscellaneous Expenses (Staff logged)
 const SEED_MISC: DailyMiscellaneous[] = [];
-
-// Seed Sales Reports (End of day)
 const SEED_SALES_REPORTS: DailySalesReport[] = [];
-
-// Seed Audit Logs
 const SEED_AUDIT: AuditLog[] = [];
-
-// Seed Notifications
 const SEED_NOTIFICATIONS: Notification[] = [];
-
-// Seed Staff Notes (Late Arrival Notes)
 const SEED_STAFF_NOTES: StaffNote[] = [];
 
-// Helper to safely fetch from localStorage or initialize with seed
 function getStored<T>(key: string, seed: T): T {
   const data = localStorage.getItem(key);
   if (!data) {
     localStorage.setItem(key, JSON.stringify(seed));
+    if (isSupabaseEnabled()) {
+      supabase!.from("app_state").upsert({ key, data: seed, version: 0 }).then(() => {
+        const event = new CustomEvent("printopia-sync", { detail: { key } });
+        window.dispatchEvent(event);
+      });
+    }
     return seed;
   }
-  try {
-    return JSON.parse(data) as T;
-  } catch {
-    return seed;
-  }
+  try { return JSON.parse(data) as T; } catch { return seed; }
 }
 
 function setStored<T>(key: string, data: T, emit = true) {
   localStorage.setItem(key, JSON.stringify(data));
-  if (emit && socket) {
+  if (emit && isSupabaseEnabled()) {
     const version = (Number(localStorage.getItem(`__v_${key}`) || 0) + 1);
     try { localStorage.setItem(`__v_${key}`, String(version)); } catch { /* ignore */ }
-    socket.emit("sync-update", { key, data, version });
+    supabase!.from("app_state").upsert({ key, data, version, updated_at: new Date().toISOString() });
   }
 }
 
-// Main DB Store object exposing clean methods
+async function initSupabaseSync() {
+  if (!isSupabaseEnabled()) return;
+  try {
+    const { data, error } = await supabase!.from("app_state").select("key, data, version");
+    if (error || !data) return;
+    let updated = false;
+    for (const row of data) {
+      if (!localStorage.getItem(row.key)) {
+        localStorage.setItem(row.key, JSON.stringify(row.data));
+        updated = true;
+        if (row.version) { try { localStorage.setItem(`__v_${row.key}`, String(row.version)); } catch { /* ignore */ } }
+      }
+    }
+    if (updated) {
+      const event = new CustomEvent("printopia-sync", { detail: { key: "printing_db_init" } });
+      window.dispatchEvent(event);
+    }
+  } catch (err) { console.error("Failed to init from Supabase:", err); }
+}
+
+function subscribeToSupabase() {
+  if (!isSupabaseEnabled() || supabaseChannel) return;
+  supabaseChannel = supabase!.channel("app_state_changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "app_state" }, (payload: any) => {
+      if (payload.new && payload.new.key) {
+        const key = payload.new.key;
+        const remoteVersion = payload.new.version || 0;
+        const localVersion = Number(localStorage.getItem(`__v_${key}`) || "0");
+        if (remoteVersion >= localVersion) {
+          localStorage.setItem(key, JSON.stringify(payload.new.data));
+          try { localStorage.setItem(`__v_${key}`, String(remoteVersion)); } catch { /* ignore */ }
+          const event = new CustomEvent("printopia-sync", { detail: { key } });
+          window.dispatchEvent(event);
+        }
+      }
+    })
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "live_activity" }, (payload: any) => {
+      if (payload.new && payload.new.data) {
+        const activities = getStored<any[]>(KEYS.LIVE_ACTIVITY, []);
+        activities.unshift(payload.new.data);
+        if (activities.length > 50) activities.pop();
+        localStorage.setItem(KEYS.LIVE_ACTIVITY, JSON.stringify(activities));
+        const event = new CustomEvent("printopia-sync", { detail: { key: KEYS.LIVE_ACTIVITY } });
+        window.dispatchEvent(event);
+      }
+    })
+    .subscribe();
+}
+
+if (typeof window !== "undefined") {
+  initSupabaseSync();
+  subscribeToSupabase();
+}
+
 export const DBStore = {
   getSyncServerUrl(settings?: CompanySettings): string {
-    return getSyncServerUrl(settings);
+    if (isSupabaseEnabled()) return (supabase as any).supabaseUrl || "";
+    return "";
   },
-  // Settings
+
   getSettings(): CompanySettings {
     const settings = getStored<CompanySettings>(KEYS.SETTINGS, DEFAULT_SETTINGS);
     if (settings.companyName === "Apex Print Solutions" || settings.companyName === "Printopia" || settings.companyName === "Apex Digital Press & Print" || !settings.logoUrl || settings.companyName === "Apex Digital Press" || settings.vatRate !== 0 || settings.invoiceFooter.includes("Bank of Africa")) {
@@ -338,32 +232,30 @@ export const DBStore = {
 
   updateSettings(settings: CompanySettings) {
     setStored(KEYS.SETTINGS, settings);
-    reconnectSocket(settings);
     this.addAuditLog("Admin", "Edit", "Settings", "Updated global store settings and invoice/receipt layout rules.");
   },
 
-  // Jobs
+  getAdminAccount(): { username: string; passwordText: string; name: string } | null {
+    const raw = localStorage.getItem("printing_db_admin_account");
+    if (!raw) return null;
+    try { return JSON.parse(raw) as { username: string; passwordText: string; name: string }; } catch { return null; }
+  },
+
+  saveAdminAccount(account: { username: string; passwordText: string; name: string }) {
+    setStored("printing_db_admin_account", account);
+  },
+
   getJobs(): Job[] {
     const jobs = getStored<Job[]>(KEYS.JOBS, SEED_JOBS);
     let updated = false;
     const migration = jobs.map(j => {
       if (!j.paymentHistory) {
-        j.paymentHistory = [
-          {
-            id: `pay-init-${j.id}`,
-            timestamp: `${j.date} ${j.time || "12:00"}`,
-            amountPaid: j.depositPaid,
-            paymentMethod: j.paymentMethod,
-            receivedBy: j.staffInitials || "System"
-          }
-        ];
+        j.paymentHistory = [{ id: `pay-init-${j.id}`, timestamp: `${j.date} ${j.time || "12:00"}`, amountPaid: j.depositPaid, paymentMethod: j.paymentMethod, receivedBy: j.staffInitials || "System" }];
         updated = true;
       }
       return j;
     });
-    if (updated) {
-      setStored(KEYS.JOBS, migration);
-    }
+    if (updated) setStored(KEYS.JOBS, migration);
     return migration;
   },
 
@@ -374,38 +266,14 @@ export const DBStore = {
     const year = new Date().getFullYear();
     const jobNumber = `JOB-${year}-${padding}`;
     const id = `job-${Date.now()}`;
-
-    const newJob: Job = { 
-      ...job, 
-      id, 
-      jobNumber,
-      paymentHistory: job.paymentHistory || [
-        {
-          id: `pay-init-${id}`,
-          timestamp: `${job.date} ${job.time || "12:00"}`,
-          amountPaid: job.depositPaid,
-          paymentMethod: job.paymentMethod,
-          receivedBy: job.staffInitials || "System"
-        }
-      ]
-    };
+    const newJob: Job = { ...job, id, jobNumber, paymentHistory: job.paymentHistory || [{ id: `pay-init-${id}`, timestamp: `${job.date} ${job.time || "12:00"}`, amountPaid: job.depositPaid, paymentMethod: job.paymentMethod, receivedBy: job.staffInitials || "System" }] };
     jobs.unshift(newJob);
     setStored(KEYS.JOBS, jobs);
-
-    // Automation: Consume standard materials mock based on description keywords
     this.autoConsumeForJob(newJob);
-
-    // Logging & Notifications
     this.addAuditLog(job.staffInitials || "Staff", "Create", "Job Intake", `Created new job ${jobNumber} for customer ${job.customerName}.`);
     this.broadcastLiveActivity(job.staffInitials || "Staff", "Create", "Job Intake", `New job ${jobNumber} for ${job.customerName}`);
-    
-    if (newJob.totalAmount >= 2500) {
-      this.addNotification("large_sale", `Large Sale Recorded: Job ${jobNumber} for ${job.customerName} of GHS ${newJob.totalAmount.toFixed(2)}.`);
-    }
-    if (newJob.balance > 0) {
-      this.addNotification("unpaid_deposit", `Deposit Balance Due: Job ${jobNumber} has a remaining balance of GHS ${newJob.balance.toFixed(2)}.`);
-    }
-
+    if (newJob.totalAmount >= 2500) this.addNotification("large_sale", `Large Sale Recorded: Job ${jobNumber} for ${job.customerName} of GHS ${newJob.totalAmount.toFixed(2)}.`);
+    if (newJob.balance > 0) this.addNotification("unpaid_deposit", `Deposit Balance Due: Job ${jobNumber} has a remaining balance of GHS ${newJob.balance.toFixed(2)}.`);
     return newJob;
   },
 
@@ -416,19 +284,9 @@ export const DBStore = {
       const oldJob = jobs[index];
       jobs[index] = job;
       setStored(KEYS.JOBS, jobs);
-      
-      this.addAuditLog(
-        job.staffInitials || "Staff",
-        "Edit",
-        "Job Intake",
-        `Updated Job ${job.jobNumber} details (Status: ${oldJob.status} ➔ ${job.status}, Stage: ${oldJob.kanbanStage} ➔ ${job.kanbanStage}).`
-      );
+      this.addAuditLog(job.staffInitials || "Staff", "Edit", "Job Intake", `Updated Job ${job.jobNumber} details (Status: ${oldJob.status} ➔ ${job.status}, Stage: ${oldJob.kanbanStage} ➔ ${job.kanbanStage}).`);
       this.broadcastLiveActivity(job.staffInitials || "Staff", "Edit", "Job Intake", `Updated job ${job.jobNumber}`);
-
-      // Check if job is overdue dynamically or status changed
-      if (job.status === "Delivered" && oldJob.status !== "Delivered") {
-        this.addAuditLog("System", "Action", "Waybill", `Waybill auto-triggered and items logged as Delivered for Job ${job.jobNumber}.`);
-      }
+      if (job.status === "Delivered" && oldJob.status !== "Delivered") this.addAuditLog("System", "Action", "Waybill", `Waybill auto-triggered and items logged as Delivered for Job ${job.jobNumber}.`);
     }
   },
 
@@ -438,19 +296,8 @@ export const DBStore = {
     if (job) {
       const filtered = jobs.filter(j => j.id !== id);
       setStored(KEYS.JOBS, filtered);
-      // Record the deletion so it shows up in the End-of-Day shift report.
       const deletedJobs = this.getDeletedJobs();
-      deletedJobs.push({
-        id: `del-${Date.now()}`,
-        originalJobId: job.id,
-        jobNumber: job.jobNumber,
-        customerName: job.customerName,
-        totalAmount: job.totalAmount,
-        depositPaid: job.depositPaid,
-        deletedBy: user,
-        refundAmount: refundAmount,
-        timestamp: new Date().toISOString()
-      });
+      deletedJobs.push({ id: `del-${Date.now()}`, originalJobId: job.id, jobNumber: job.jobNumber, customerName: job.customerName, totalAmount: job.totalAmount, depositPaid: job.depositPaid, deletedBy: user, refundAmount, timestamp: new Date().toISOString() });
       setStored(KEYS.DELETED_JOBS, deletedJobs);
       this.addAuditLog(user, "Delete", "Job Intake", `Deleted Job ${job.jobNumber} for ${job.customerName}.${refundAmount > 0 ? ` Refund issued: ${refundAmount.toFixed(2)}.` : ""} Reason: customer mind-change / cancelled work.`);
       this.broadcastLiveActivity(user, "Delete", "Job Intake", `Deleted job ${job.jobNumber}`);
@@ -458,35 +305,18 @@ export const DBStore = {
     }
   },
 
-  getDeletedJobs(): DeletedJob[] {
-    return getStored<DeletedJob[]>(KEYS.DELETED_JOBS, []);
-  },
+  getDeletedJobs(): DeletedJob[] { return getStored<DeletedJob[]>(KEYS.DELETED_JOBS, []); },
 
-  // Automatically deplete stock based on job description keywords
   autoConsumeForJob(job: Job) {
     const desc = job.jobDescription.toLowerCase();
-    if (desc.includes("cotton") || desc.includes("shirt")) {
-      this.consumeInventoryByKeyword("Cotton Shirt", Math.floor(job.totalAmount / 70) || 5);
-    }
-    if (desc.includes("sticker") || desc.includes("label")) {
-      this.consumeInventoryByKeyword("Sticker Rolls", 1);
-    }
-    if (desc.includes("banner")) {
-      this.consumeInventoryByKeyword("Banner Canvas Roll", 1);
-    }
-    if (desc.includes("dtf")) {
-      this.consumeInventoryByKeyword("DTF Matte Film Roll", 2);
-      this.consumeInventoryByKeyword("Premium DTF Powder", 1);
-    }
-    if (desc.includes("frame")) {
-      this.consumeInventoryByKeyword("Paper A3", 5);
-    }
+    if (desc.includes("cotton") || desc.includes("shirt")) this.consumeInventoryByKeyword("Cotton Shirt", Math.floor(job.totalAmount / 70) || 5);
+    if (desc.includes("sticker") || desc.includes("label")) this.consumeInventoryByKeyword("Sticker Rolls", 1);
+    if (desc.includes("banner")) this.consumeInventoryByKeyword("Banner Canvas Roll", 1);
+    if (desc.includes("dtf")) { this.consumeInventoryByKeyword("DTF Matte Film Roll", 2); this.consumeInventoryByKeyword("Premium DTF Powder", 1); }
+    if (desc.includes("frame")) this.consumeInventoryByKeyword("Paper A3", 5);
   },
 
-  // General Printing Orders (Module 1)
-  getGeneralPrintingOrders(): GeneralPrintingOrder[] {
-    return getStored<GeneralPrintingOrder[]>(KEYS.GPO, SEED_GPO);
-  },
+  getGeneralPrintingOrders(): GeneralPrintingOrder[] { return getStored<GeneralPrintingOrder[]>(KEYS.GPO, SEED_GPO); },
 
   saveGeneralPrintingOrder(order: Omit<GeneralPrintingOrder, "id" | "orderNumber">): GeneralPrintingOrder {
     const orders = this.getGeneralPrintingOrders();
@@ -495,57 +325,28 @@ export const DBStore = {
     const year = new Date().getFullYear();
     const orderNumber = `GPO-${year}-${padding}`;
     const id = `gpo-${Date.now()}`;
-
     const newOrder: GeneralPrintingOrder = { ...order, id, orderNumber };
     orders.unshift(newOrder);
     setStored(KEYS.GPO, orders);
-
-    // Deplete inventory depending on items selected
-    if (newOrder.photocopy.quantity > 0) {
-      this.consumeInventoryByKeyword("Paper A4", Math.ceil(newOrder.photocopy.quantity / 500) || 1);
-    }
-    if (newOrder.printing.quantity > 0) {
-      this.consumeInventoryByKeyword("Paper A4", Math.ceil(newOrder.printing.quantity / 500) || 1);
-      this.consumeInventoryByKeyword("Black Ink Bottle", 1);
-    }
-    if (newOrder.frame.quantity > 0) {
-      this.consumeInventoryByKeyword("Paper A3", newOrder.frame.quantity);
-    }
+    if (newOrder.photocopy.quantity > 0) this.consumeInventoryByKeyword("Paper A4", Math.ceil(newOrder.photocopy.quantity / 500) || 1);
+    if (newOrder.printing.quantity > 0) { this.consumeInventoryByKeyword("Paper A4", Math.ceil(newOrder.printing.quantity / 500) || 1); this.consumeInventoryByKeyword("Black Ink Bottle", 1); }
+    if (newOrder.frame.quantity > 0) this.consumeInventoryByKeyword("Paper A3", newOrder.frame.quantity);
     if (newOrder.tshirt.quantity > 0) {
-      if (newOrder.tshirt.category === "Cotton") {
-        this.consumeInventoryByKeyword("Cotton Shirt", newOrder.tshirt.quantity);
-      } else if (newOrder.tshirt.category === "Lacoste") {
-        this.consumeInventoryByKeyword("Lacoste Shirt", newOrder.tshirt.quantity);
-      }
+      if (newOrder.tshirt.category === "Cotton") this.consumeInventoryByKeyword("Cotton Shirt", newOrder.tshirt.quantity);
+      else if (newOrder.tshirt.category === "Lacoste") this.consumeInventoryByKeyword("Lacoste Shirt", newOrder.tshirt.quantity);
     }
-    if (newOrder.largeFormat.sticker.quantity > 0) {
-      this.consumeInventoryByKeyword("Sticker Rolls", 1);
-    }
-    if (newOrder.largeFormat.banner.quantity > 0) {
-      this.consumeInventoryByKeyword("Banner Canvas Roll", 1);
-    }
-    if (newOrder.dtf.a3.quantity > 0 || newOrder.dtf.a4.quantity > 0) {
-      this.consumeInventoryByKeyword("DTF Matte Film Roll", 1);
-      this.consumeInventoryByKeyword("Premium DTF Powder", 1);
-    }
-
+    if (newOrder.largeFormat.sticker.quantity > 0) this.consumeInventoryByKeyword("Sticker Rolls", 1);
+    if (newOrder.largeFormat.banner.quantity > 0) this.consumeInventoryByKeyword("Banner Canvas Roll", 1);
+    if (newOrder.dtf.a3.quantity > 0 || newOrder.dtf.a4.quantity > 0) { this.consumeInventoryByKeyword("DTF Matte Film Roll", 1); this.consumeInventoryByKeyword("Premium DTF Powder", 1); }
     this.addAuditLog(order.staffName, "Create", "General Printing", `Created general order ${orderNumber} for ${order.customerName}.`);
     this.broadcastLiveActivity(order.staffName, "Create", "General Printing", `New order ${orderNumber} for ${order.customerName}`);
-
-    if (newOrder.grandTotal >= 1500) {
-      this.addNotification("large_sale", `Large Sale Recorded: General Order ${orderNumber} for GHS ${newOrder.grandTotal.toFixed(2)}.`);
-    }
-
+    if (newOrder.grandTotal >= 1500) this.addNotification("large_sale", `Large Sale Recorded: General Order ${orderNumber} for GHS ${newOrder.grandTotal.toFixed(2)}.`);
     return newOrder;
   },
 
-  // Inventory
   getInventory(): InventoryItem[] {
     const stored = getStored<InventoryItem[]>(KEYS.INVENTORY, SEED_INVENTORY);
-    if (!stored || stored.length === 0) {
-      setStored(KEYS.INVENTORY, SEED_INVENTORY);
-      return SEED_INVENTORY;
-    }
+    if (!stored || stored.length === 0) { setStored(KEYS.INVENTORY, SEED_INVENTORY); return SEED_INVENTORY; }
     return stored;
   },
 
@@ -554,26 +355,13 @@ export const DBStore = {
     const index = inventory.findIndex(i => i.id === item.id);
     if (index !== -1) {
       const oldItem = inventory[index];
-      
-      // Enforce calculated remaining stock
       item.remainingStock = item.openingStock + item.purchased - item.used;
       if (item.remainingStock < 0) item.remainingStock = 0;
-
       inventory[index] = item;
       setStored(KEYS.INVENTORY, inventory);
-
-      this.addAuditLog(
-        user,
-        "Edit",
-        "Inventory",
-        `Updated Stock for ${item.item} (Remaining: ${oldItem.remainingStock} ➔ ${item.remainingStock}).`
-      );
+      this.addAuditLog(user, "Edit", "Inventory", `Updated Stock for ${item.item} (Remaining: ${oldItem.remainingStock} ➔ ${item.remainingStock}).`);
       this.broadcastLiveActivity(user, "Edit", "Inventory", `Updated stock for ${item.item}`);
-
-      // Trigger stock alerts dynamically if remaining goes low
-      if (item.remainingStock <= item.minimumStock) {
-        this.addNotification("low_stock", `Low Stock Alert: ${item.item} is down to ${item.remainingStock} (Min limit: ${item.minimumStock}). Please reorder.`);
-      }
+      if (item.remainingStock <= item.minimumStock) this.addNotification("low_stock", `Low Stock Alert: ${item.item} is down to ${item.remainingStock} (Min limit: ${item.minimumStock}). Please reorder.`);
     }
   },
 
@@ -584,14 +372,9 @@ export const DBStore = {
     const newItem: InventoryItem = { ...item, id, remainingStock };
     inventory.push(newItem);
     setStored(KEYS.INVENTORY, inventory);
-
     this.addAuditLog(user, "Create", "Inventory", `Added new Inventory Item: ${newItem.item}.`);
     this.broadcastLiveActivity(user, "Create", "Inventory", `Added item ${newItem.item}`);
-    
-    if (newItem.remainingStock <= newItem.minimumStock) {
-      this.addNotification("low_stock", `Low Stock Alert: ${newItem.item} initialized with low stock.`);
-    }
-
+    if (newItem.remainingStock <= newItem.minimumStock) this.addNotification("low_stock", `Low Stock Alert: ${newItem.item} initialized with low stock.`);
     return newItem;
   },
 
@@ -613,21 +396,13 @@ export const DBStore = {
       item.used += qty;
       item.remainingStock = item.openingStock + item.purchased - item.used;
       if (item.remainingStock < 0) item.remainingStock = 0;
-      
       setStored(KEYS.INVENTORY, inventory);
-      
       this.addAuditLog("System Auto", "Edit", "Inventory", `Auto-consumed ${qty} units of ${item.item} for production processing.`);
-      
-      if (item.remainingStock <= item.minimumStock) {
-        this.addNotification("low_stock", `Low Stock Alert: ${item.item} fell to ${item.remainingStock} units (Limit: ${item.minimumStock}).`);
-      }
+      if (item.remainingStock <= item.minimumStock) this.addNotification("low_stock", `Low Stock Alert: ${item.item} fell to ${item.remainingStock} units (Limit: ${item.minimumStock}).`);
     }
   },
 
-  // Expenditures
-  getExpenditures(): Expenditure[] {
-    return getStored<Expenditure[]>(KEYS.EXPENDITURES, SEED_EXPENDITURES);
-  },
+  getExpenditures(): Expenditure[] { return getStored<Expenditure[]>(KEYS.EXPENDITURES, SEED_EXPENDITURES); },
 
   addExpenditure(exp: Omit<Expenditure, "id">, user: string): Expenditure {
     const expenditures = this.getExpenditures();
@@ -635,27 +410,18 @@ export const DBStore = {
     const newExp: Expenditure = { ...exp, id };
     expenditures.unshift(newExp);
     setStored(KEYS.EXPENDITURES, expenditures);
-
     this.addAuditLog(user, "Create", "Expenditures", `Logged monthly expenditure of GHS ${newExp.amount.toFixed(2)} for ${newExp.item}.`);
     this.broadcastLiveActivity(user, "Create", "Expenditures", `Logged expenditure GHS ${newExp.amount.toFixed(2)} for ${newExp.item}`);
-
     return newExp;
   },
 
   deleteExpenditure(id: string, user: string) {
     const expenditures = this.getExpenditures();
     const exp = expenditures.find(e => e.id === id);
-    if (exp) {
-      const filtered = expenditures.filter(e => e.id !== id);
-      setStored(KEYS.EXPENDITURES, filtered);
-      this.addAuditLog(user, "Delete", "Expenditures", `Deleted expenditure of GHS ${exp.amount.toFixed(2)}: ${exp.item}.`);
-    }
+    if (exp) { const filtered = expenditures.filter(e => e.id !== id); setStored(KEYS.EXPENDITURES, filtered); this.addAuditLog(user, "Delete", "Expenditures", `Deleted expenditure of GHS ${exp.amount.toFixed(2)}: ${exp.item}.`); }
   },
 
-  // Daily Miscellaneous
-  getDailyMiscellaneous(): DailyMiscellaneous[] {
-    return getStored<DailyMiscellaneous[]>(KEYS.MISCELLANEOUS, SEED_MISC);
-  },
+  getDailyMiscellaneous(): DailyMiscellaneous[] { return getStored<DailyMiscellaneous[]>(KEYS.MISCELLANEOUS, SEED_MISC); },
 
   addDailyMiscellaneous(misc: Omit<DailyMiscellaneous, "id">): DailyMiscellaneous {
     const miscellaneous = this.getDailyMiscellaneous();
@@ -663,16 +429,11 @@ export const DBStore = {
     const newMisc: DailyMiscellaneous = { ...misc, id };
     miscellaneous.unshift(newMisc);
     setStored(KEYS.MISCELLANEOUS, miscellaneous);
-
     this.addAuditLog(misc.staffName, "Create", "Daily Misc", `Logged local daily miscellaneous item GHS ${misc.amount.toFixed(2)}: ${misc.item}.`);
-
     return newMisc;
   },
 
-  // Daily End of Day Sales Reports
-  getDailySalesReports(): DailySalesReport[] {
-    return getStored<DailySalesReport[]>(KEYS.SALES_REPORTS, SEED_SALES_REPORTS);
-  },
+  getDailySalesReports(): DailySalesReport[] { return getStored<DailySalesReport[]>(KEYS.SALES_REPORTS, SEED_SALES_REPORTS); },
 
   addDailySalesReport(report: Omit<DailySalesReport, "id" | "isApproved">): DailySalesReport {
     const reports = this.getDailySalesReports();
@@ -680,57 +441,37 @@ export const DBStore = {
     const newReport: DailySalesReport = { ...report, id, isApproved: false };
     reports.unshift(newReport);
     setStored(KEYS.SALES_REPORTS, reports);
-
     this.addAuditLog(report.staffName, "Create", "Sales Report", `Submitted End of Day Sales Report for ${report.date} with Total GHS ${report.totalSales.toFixed(2)}.`);
-    
-    // Add an alert notification in the system immediately so that Admin is notified
-    this.addNotification(
-      "missing_report",
-      `New Shift Report: ${report.staffName} submitted EOD Balanced Statement for ${report.date} (${report.shift}) - Total sales: ${this.getSettings().currency} ${report.totalSales.toFixed(2)}.`
-    );
-
+    this.addNotification("missing_report", `New Shift Report: ${report.staffName} submitted EOD Balanced Statement for ${report.date} (${report.shift}) - Total sales: ${this.getSettings().currency} ${report.totalSales.toFixed(2)}.`);
     return newReport;
   },
 
   approveSalesReport(id: string, adminUser: string) {
     const reports = this.getDailySalesReports();
     const index = reports.findIndex(r => r.id === id);
-    if (index !== -1) {
-      reports[index].isApproved = true;
-      setStored(KEYS.SALES_REPORTS, reports);
-      this.addAuditLog(adminUser, "Edit", "Sales Report", `Approved End of Day sales report ID: ${id}.`);
-    }
+    if (index !== -1) { reports[index].isApproved = true; setStored(KEYS.SALES_REPORTS, reports); this.addAuditLog(adminUser, "Edit", "Sales Report", `Approved End of Day sales report ID: ${id}.`); }
   },
 
-  // Audit Logs
-  getAuditLogs(): AuditLog[] {
-    return getStored<AuditLog[]>(KEYS.AUDIT_LOGS, SEED_AUDIT);
-  },
+  getAuditLogs(): AuditLog[] { return getStored<AuditLog[]>(KEYS.AUDIT_LOGS, SEED_AUDIT); },
 
   addAuditLog(user: string, action: string, module: string, details: string): AuditLog {
     const logs = this.getAuditLogs();
     const id = `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const timestamp = new Date().toISOString();
     const newLog: AuditLog = { id, timestamp, user, action, module, details };
-    
     logs.unshift(newLog);
-    // Keep logs size reasonable
     if (logs.length > 200) logs.pop();
     setStored(KEYS.AUDIT_LOGS, logs);
     return newLog;
   },
 
-  // Notifications
-  getNotifications(): Notification[] {
-    return getStored<Notification[]>(KEYS.NOTIFICATIONS, SEED_NOTIFICATIONS);
-  },
+  getNotifications(): Notification[] { return getStored<Notification[]>(KEYS.NOTIFICATIONS, SEED_NOTIFICATIONS); },
 
   addNotification(type: Notification["type"], message: string): Notification {
     const notifications = this.getNotifications();
     const id = `not-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const timestamp = new Date().toISOString();
     const newNot: Notification = { id, timestamp, type, message, isRead: false };
-    
     notifications.unshift(newNot);
     setStored(KEYS.NOTIFICATIONS, notifications);
     return newNot;
@@ -739,10 +480,7 @@ export const DBStore = {
   markNotificationRead(id: string) {
     const notifications = this.getNotifications();
     const item = notifications.find(n => n.id === id);
-    if (item) {
-      item.isRead = true;
-      setStored(KEYS.NOTIFICATIONS, notifications);
-    }
+    if (item) { item.isRead = true; setStored(KEYS.NOTIFICATIONS, notifications); }
   },
 
   markAllNotificationsRead() {
@@ -751,44 +489,23 @@ export const DBStore = {
     setStored(KEYS.NOTIFICATIONS, notifications);
   },
 
-  // Check for jobs with deadline approaching (1 day left) and create notifications
   checkJobDeadlines(): number {
     const jobs = this.getJobs();
     let created = 0;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
     const notifications = this.getNotifications();
-
     jobs.forEach(job => {
       if (job.status === "Delivered" || job.status === "Cancelled" || job.kanbanStage === "Job Completed") return;
-      
-      const deadline = new Date(job.expectedDeliveryDate);
-      deadline.setHours(0, 0, 0, 0);
-      
-      // Check if deadline is tomorrow (1 day left)
-      const isTomorrow = deadline.getTime() === tomorrow.getTime();
-      
-      if (isTomorrow) {
-        const existingNotif = notifications.find(n => 
-          n.type === "deadline_approaching" && 
-          n.message.includes(job.jobNumber)
-        );
-        
-        if (!existingNotif) {
-          this.addNotification("deadline_approaching", `⚠️ Job ${job.jobNumber} for ${job.customerName} is due TOMORROW (${job.expectedDeliveryDate})`);
-          created++;
-        }
+      const deadline = new Date(job.expectedDeliveryDate); deadline.setHours(0, 0, 0, 0);
+      if (deadline.getTime() === tomorrow.getTime()) {
+        const existingNotif = notifications.find(n => n.type === "deadline_approaching" && n.message.includes(job.jobNumber));
+        if (!existingNotif) { this.addNotification("deadline_approaching", `⚠️ Job ${job.jobNumber} for ${job.customerName} is due TOMORROW (${job.expectedDeliveryDate})`); created++; }
       }
     });
-    
     return created;
   },
 
-  // Trigger manual data backup log
   triggerAutoBackup(user: string): string {
     const timestamp = new Date().toLocaleTimeString();
     const logDetails = `Manual backup executed successfully. Encrypted database state saved. Version hash: ${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -796,28 +513,8 @@ export const DBStore = {
     return timestamp;
   },
 
-  // Export full database backup as downloadable JSON file
   exportBackup(filename?: string): void {
-    const backup = {
-      exportedAt: new Date().toISOString(),
-      app: "Printopia Digital Press",
-      version: "2.0",
-      data: {
-        jobs: this.getJobs(),
-        inventory: this.getInventory(),
-        expenditures: this.getExpenditures(),
-        miscellaneous: this.getDailyMiscellaneous(),
-        salesReports: this.getDailySalesReports(),
-        generalPrintingOrders: this.getGeneralPrintingOrders(),
-        auditLogs: this.getAuditLogs(),
-        notifications: this.getNotifications(),
-        settings: this.getSettings(),
-        staffAccounts: this.getStaffAccounts(),
-        staffNotes: this.getStaffNotes(),
-        staffAttendance: this.getStaffAttendance()
-      }
-    };
-
+    const backup = { exportedAt: new Date().toISOString(), app: "Printopia Digital Press", version: "2.0", data: { jobs: this.getJobs(), inventory: this.getInventory(), expenditures: this.getExpenditures(), miscellaneous: this.getDailyMiscellaneous(), salesReports: this.getDailySalesReports(), generalPrintingOrders: this.getGeneralPrintingOrders(), auditLogs: this.getAuditLogs(), notifications: this.getNotifications(), settings: this.getSettings(), staffAccounts: this.getStaffAccounts(), staffNotes: this.getStaffNotes(), staffAttendance: this.getStaffAttendance() } };
     const json = JSON.stringify(backup, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -832,112 +529,41 @@ export const DBStore = {
     URL.revokeObjectURL(url);
   },
 
-  // Collect all unique customer phone numbers from jobs and GPOs
   getAllCustomerPhoneNumbers(): string[] {
     const phones = new Set<string>();
-    
-    const jobs = this.getJobs();
-    jobs.forEach(job => {
-      if (job.customerPhone && job.customerPhone.trim().length > 0) {
-        phones.add(job.customerPhone.trim());
-      }
-    });
-
-    const gpos = this.getGeneralPrintingOrders();
-    gpos.forEach(gpo => {
-      if (gpo.customerPhone && gpo.customerPhone.trim().length > 0) {
-        phones.add(gpo.customerPhone.trim());
-      }
-    });
-
+    this.getJobs().forEach(job => { if (job.customerPhone && job.customerPhone.trim().length > 0) phones.add(job.customerPhone.trim()); });
+    this.getGeneralPrintingOrders().forEach(gpo => { if (gpo.customerPhone && gpo.customerPhone.trim().length > 0) phones.add(gpo.customerPhone.trim()); });
     return Array.from(phones).sort();
   },
 
   purgeDemoData(user: string) {
-    setStored(KEYS.JOBS, []);
-    setStored(KEYS.GPO, []);
-    setStored(KEYS.EXPENDITURES, []);
-    setStored(KEYS.MISCELLANEOUS, []);
-    setStored(KEYS.SALES_REPORTS, []);
-    setStored(KEYS.NOTIFICATIONS, []);
-    setStored(KEYS.AUDIT_LOGS, [
-      {
-        id: `log-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        user: user,
-        action: "Purge Database",
-        module: "System Setup",
-        details: "All seed transaction data (Jobs, Orders, Expenditures, End of Day Reports, Notifications) was purged for active company deployment."
-      }
-    ]);
+    setStored(KEYS.JOBS, []); setStored(KEYS.GPO, []); setStored(KEYS.EXPENDITURES, []); setStored(KEYS.MISCELLANEOUS, []); setStored(KEYS.SALES_REPORTS, []); setStored(KEYS.NOTIFICATIONS, []);
+    setStored(KEYS.AUDIT_LOGS, [{ id: `log-${Date.now()}`, timestamp: new Date().toISOString(), user, action: "Purge Database", module: "System Setup", details: "All seed transaction data (Jobs, Orders, Expenditures, End of Day Reports, Notifications) was purged for active company deployment." }]);
   },
 
-  purgeInventoryData(user: string) {
-    setStored(KEYS.INVENTORY, []);
-    this.addAuditLog(user, "Purge Stock", "Inventory", "All default seed inventory materials were cleared for live stock tracking setup.");
-  },
+  purgeInventoryData(user: string) { setStored(KEYS.INVENTORY, []); this.addAuditLog(user, "Purge Stock", "Inventory", "All default seed inventory materials were cleared for live stock tracking setup."); },
 
-  // Wipe ALL local data and restore factory default state (settings, staff, inventory, audit)
   resetAllData(user: string) {
-    const keys = Object.values(KEYS) as string[];
-    keys.forEach(k => {
-      try { localStorage.removeItem(k); } catch { /* ignore */ }
-    });
-    // Re-seed defaults by reading through the normal accessors
-    this.getSettings();
-    this.getStaffAccounts();
-    this.getInventory();
-    this.getJobs();
-    this.getGeneralPrintingOrders();
-    this.getExpenditures();
-    this.getDailyMiscellaneous();
-    this.getDailySalesReports();
-    this.getStaffNotes();
-    this.getStaffAttendance();
+    Object.values(KEYS).forEach(k => { try { localStorage.removeItem(k); } catch { /* ignore */ } });
+    this.getSettings(); this.getStaffAccounts(); this.getInventory(); this.getJobs(); this.getGeneralPrintingOrders(); this.getExpenditures(); this.getDailyMiscellaneous(); this.getDailySalesReports(); this.getStaffNotes(); this.getStaffAttendance();
     this.addAuditLog(user, "System Reset", "System Setup", "Full system reset executed. All business data (jobs, orders, expenditures, reports, inventory, notes, attendance) was cleared and factory defaults were restored.");
   },
 
   getStaffAccounts(): StaffAccount[] {
     const accounts = getStored<StaffAccount[]>(KEYS.STAFF, DEFAULT_STAFF_ACCOUNTS);
-    // Auto-migrate old names to Staff 1 and Staff 2 if they exist in localStorage
     let updated = false;
     const migrated = accounts.map(acc => {
-      if (acc.id === "staff-1" && (acc.name === "Selasie Boateng" || acc.username === "selasie")) {
-        updated = true;
-        return {
-          ...acc,
-          name: "Staff 1",
-          username: "staff1",
-          passwordText: acc.passwordText === "selasie123" ? "staff123" : acc.passwordText
-        };
-      }
-      if (acc.id === "staff-2" && (acc.name === "Kojo Mensah" || acc.username === "kojo")) {
-        updated = true;
-        return {
-          ...acc,
-          name: "Staff 2",
-          username: "staff2",
-          passwordText: acc.passwordText === "kojo123" ? "staff456" : acc.passwordText
-        };
-      }
+      if (acc.id === "staff-1" && (acc.name === "Selasie Boateng" || acc.username === "selasie")) { updated = true; return { ...acc, name: "Staff 1", username: "staff1", passwordText: acc.passwordText === "selasie123" ? "staff123" : acc.passwordText }; }
+      if (acc.id === "staff-2" && (acc.name === "Kojo Mensah" || acc.username === "kojo")) { updated = true; return { ...acc, name: "Staff 2", username: "staff2", passwordText: acc.passwordText === "kojo123" ? "staff456" : acc.passwordText }; }
       return acc;
     });
-
-    if (updated) {
-      setStored(KEYS.STAFF, migrated);
-      return migrated;
-    }
-    return accounts;
+    if (updated) setStored(KEYS.STAFF, migrated);
+    return migrated;
   },
 
-  saveStaffAccounts(accounts: StaffAccount[]) {
-    setStored(KEYS.STAFF, accounts);
-  },
+  saveStaffAccounts(accounts: StaffAccount[]) { setStored(KEYS.STAFF, accounts); },
 
-  // Staff Late Arrival Notes
-  getStaffNotes(): StaffNote[] {
-    return getStored<StaffNote[]>(KEYS.STAFF_NOTES, SEED_STAFF_NOTES);
-  },
+  getStaffNotes(): StaffNote[] { return getStored<StaffNote[]>(KEYS.STAFF_NOTES, SEED_STAFF_NOTES); },
 
   addStaffNote(note: Omit<StaffNote, "id" | "timestamp">): StaffNote {
     const notes = this.getStaffNotes();
@@ -953,17 +579,10 @@ export const DBStore = {
   deleteStaffNote(id: string, user: string) {
     const notes = this.getStaffNotes();
     const note = notes.find(n => n.id === id);
-    if (note) {
-      const filtered = notes.filter(n => n.id !== id);
-      setStored(KEYS.STAFF_NOTES, filtered);
-      this.addAuditLog(user, "Delete", "Staff Notes", `Removed late arrival note for ${note.staffName} dated ${note.date}.`);
-    }
+    if (note) { const filtered = notes.filter(n => n.id !== id); setStored(KEYS.STAFF_NOTES, filtered); this.addAuditLog(user, "Delete", "Staff Notes", `Removed late arrival note for ${note.staffName} dated ${note.date}.`); }
   },
 
-  // Staff Attendance / Clock-In Sessions
-  getStaffAttendance(): StaffNote[] {
-    return getStored<StaffNote[]>(KEYS.STAFF_ATTENDANCE, []);
-  },
+  getStaffAttendance(): StaffNote[] { return getStored<StaffNote[]>(KEYS.STAFF_ATTENDANCE, []); },
 
   addStaffAttendance(session: Omit<StaffNote, "id" | "timestamp">): StaffNote {
     const sessions = this.getStaffAttendance();
@@ -972,80 +591,41 @@ export const DBStore = {
     const newSession: StaffNote = { ...session, id, timestamp };
     sessions.unshift(newSession);
     setStored(KEYS.STAFF_ATTENDANCE, sessions);
-    this.addAuditLog(
-      session.recordedBy,
-      "Create",
-      "Staff Attendance",
-      `Recorded ${session.sessionType || "attendance"} session for ${session.staffName} (${session.date}${session.clockInTime ? " in " + session.clockInTime : ""}${session.clockOutTime ? " out " + session.clockOutTime : ""}).`
-    );
+    this.addAuditLog(session.recordedBy, "Create", "Staff Attendance", `Recorded ${session.sessionType || "attendance"} session for ${session.staffName} (${session.date}${session.clockInTime ? " in " + session.clockInTime : ""}${session.clockOutTime ? " out " + session.clockOutTime : ""}).`);
     return newSession;
   },
 
-  // Ask the server for the authoritative shared state and overwrite local copy.
-  // This guarantees every device (anywhere) shows the exact same data.
   requestFullSync() {
-    const s = ensureSocket();
-    if (!s) return;
-    s.emit("request-sync", {});
-    s.once("sync-init", (payload: any) => {
-      const cache = payload && payload.cache ? payload.cache : payload;
-      const version = payload && typeof payload.version === "number" ? payload.version : 0;
-      for (const key in cache) {
-        if (key.startsWith("__v_")) continue;
-        localStorage.setItem(key, JSON.stringify(cache[key]));
-        try { localStorage.setItem(`__v_${key}`, String(version)); } catch { /* ignore */ }
+    if (!isSupabaseEnabled()) return;
+    supabase!.from("app_state").select("key, data, version").then(({ data }: any) => {
+      if (!data) return;
+      for (const row of data) {
+        localStorage.setItem(row.key, JSON.stringify(row.data));
+        if (row.version) { try { localStorage.setItem(`__v_${row.key}`, String(row.version)); } catch { /* ignore */ } }
       }
       const event = new CustomEvent("printopia-sync", { detail: { key: "printing_db_init" } });
       window.dispatchEvent(event);
     });
   },
 
-  // Admin action: wipe the shared store on the server so ALL connected devices
-  // start blank. Local staff accounts / settings are re-seeded from defaults.
   async clearAllSharedData(user: string): Promise<boolean> {
-    const url = getSyncServerUrl();
+    if (!isSupabaseEnabled()) return false;
     try {
-      const res = await fetch(`${url}/api/clear-all`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user })
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      // Local cleanup for everything except the admin's own credentials/settings
-      Object.values(KEYS).forEach((k) => {
-        if (k === KEYS.STAFF || k === KEYS.SETTINGS) return;
-        localStorage.removeItem(k);
-        localStorage.removeItem(`__v_${k}`);
-      });
+      await supabase!.from("app_state").delete().neq("key", "");
+      await supabase!.from("live_activity").delete().neq("id", "");
+      Object.values(KEYS).forEach((k) => { if (k === KEYS.STAFF || k === KEYS.SETTINGS) return; localStorage.removeItem(k); localStorage.removeItem(`__v_${k}`); });
       return true;
-    } catch (err) {
-      console.error("Clear all shared data failed:", err);
-      return false;
-    }
+    } catch (err) { console.error("Clear all shared data failed:", err); return false; }
   },
 
   broadcastLiveActivity(user: string, action: string, module: string, details: string) {
     const activities = getStored<any[]>(KEYS.LIVE_ACTIVITY, []);
-    const entry = {
-      id: `live-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      timestamp: new Date().toISOString(),
-      user,
-      action,
-      module,
-      details
-    };
+    const entry = { id: `live-${Date.now()}-${Math.floor(Math.random() * 1000)}`, timestamp: new Date().toISOString(), user, action, module, details };
     activities.unshift(entry);
     if (activities.length > 50) activities.pop();
     localStorage.setItem(KEYS.LIVE_ACTIVITY, JSON.stringify(activities));
-    if (socket) {
-      socket.emit("live-activity", entry);
-    }
+    if (isSupabaseEnabled()) { supabase!.from("live_activity").insert({ id: entry.id, data: entry }); }
   },
 
-  getLiveActivities(): any[] {
-    return getStored<any[]>(KEYS.LIVE_ACTIVITY, []);
-  }
+  getLiveActivities(): any[] { return getStored<any[]>(KEYS.LIVE_ACTIVITY, []); }
 };
-
-// Initial connection using default/localhost URL
-ensureSocket();

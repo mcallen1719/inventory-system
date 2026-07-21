@@ -13,10 +13,23 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         injectRegister: 'auto',
         workbox: {
-          // Cache ALL assets — app works fully offline after first visit
           globPatterns: ['**/*.{js,css,html,ico,png,jpg,jpeg,svg,woff,woff2}'],
-          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB limit per file
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/.*$/,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'external-cache',
+                expiration: { maxEntries: 50, maxAgeSeconds: 7 * 24 * 60 * 60 },
+              },
+            },
+          ],
+        },
+            {
+              urlPattern: /\/api\/.*/,
+              handler: 'NetworkOnly',
+            },
             {
               urlPattern: /^https:\/\/.*$/,
               handler: 'NetworkFirst',

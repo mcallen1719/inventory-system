@@ -5,8 +5,10 @@ services:
     buildCommand: npm install --include=dev && npm run build && node -e "require('fs').cpSync('dist','webapp',{recursive:true})"
     startCommand: npm start
     plan: free
-    envVars:
-      - key: NODE_ENV
-        value: production
+envVars:
+  - key: VITE_SUPABASE_URL
+    sync: false
+  - key: VITE_SUPABASE_ANON_KEY
+    sync: false
       - key: PORT
         value: 3001
