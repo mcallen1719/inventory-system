@@ -730,6 +730,11 @@ export default function StaffDashboard({
   const [gpSpecialAmount, setGpSpecialAmount] = useState(0);
   const [gpSpecialList, setGpSpecialList] = useState<Array<{ description: string; quantity: number; amount: number }>>([]);
 
+  // Receipt prompt after adding service
+  const [showReceiptPrompt, setShowReceiptPrompt] = useState(false);
+  const [receiptType, setReceiptType] = useState<"invoice" | "receipt" | "waybill" | "delivery_receipt">("receipt");
+  const [pendingServiceData, setPendingServiceData] = useState<{ description: string; quantity: number; amount: number } | null>(null);
+
   const addGpSpecialService = () => {
     if (!gpSpecialDesc || gpSpecialAmount <= 0) return;
     const newService = {
@@ -744,21 +749,33 @@ export default function StaffDashboard({
     DBStore.addNotification("service_added", `Service Added: "${newService.description}" (Qty: ${newService.quantity}) - ${currency} ${newService.amount.toFixed(2)}`);
     DBStore.broadcastLiveActivity(activeUserName, "Add", "Special Service", `Added service: ${newService.description}`);
     onRefreshGlobalState();
-    alert(`Service Added Successfully!\n\nService: ${newService.description}\nQty: ${newService.quantity}\nAmount: ${currency} ${newService.amount.toFixed(2)}\n\nA receipt is now opening for this service.`);
+    setPendingServiceData(newService);
+    setShowReceiptPrompt(true);
+  };
+
+  const handleReceiptConfirm = () => {
+    if (!pendingServiceData) return;
     const now = new Date();
-    onOpenDocument("receipt", {
+    onOpenDocument(receiptType, {
       id: `srv-${now.getTime()}`,
       receiptNumber: `REC-${now.toISOString().split("T")[0].replace(/-/g, "")}-${now.getTime().toString().slice(-4)}`,
       customerName: gpCustomer && gpCustomer.trim() ? gpCustomer : "Walk-In",
       date: now.toISOString().split("T")[0],
-      items: [{ description: newService.description, total: newService.amount }],
-      grandTotal: newService.amount,
-      paymentAmount: newService.amount,
+      items: [{ description: pendingServiceData.description, total: pendingServiceData.amount }],
+      grandTotal: pendingServiceData.amount,
+      paymentAmount: pendingServiceData.amount,
       balance: 0,
       cashier: activeUserName,
-      barcodeData: newService.description,
-      qrCodeData: `${newService.description}|${newService.amount}`
+      barcodeData: pendingServiceData.description,
+      qrCodeData: `${pendingServiceData.description}|${pendingServiceData.amount}`
     });
+    setShowReceiptPrompt(false);
+    setPendingServiceData(null);
+  };
+
+  const handleReceiptCancel = () => {
+    setShowReceiptPrompt(false);
+    setPendingServiceData(null);
   };
 
   const removeGpSpecialService = (idx: number) => {
@@ -5086,6 +5103,60 @@ export default function StaffDashboard({
           </div>
         )}
       </AnimatePresence>
+
+      {/* Receipt Prompt Modal */}
+      {showReceiptPrompt && pendingServiceData && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl p-6 space-y-5">
+            <div className="text-center space-y-2">
+              <div className="h-12 w-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-lg">
+                <CheckCircle className="h-6 w-6" />
+              </div>
+              <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Service Added Successfully</h3>
+              <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
+                {pendingServiceData.description} — {currency} {pendingServiceData.amount.toFixed(2)}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-bold text-gray-800 dark:text-white text-center">
+                Would you like to generate a receipt?
+              </p>
+
+              {receiptType !== "none" && (
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest">Select Document Type</label>
+                  <select
+                    value={receiptType}
+                    onChange={(e) => setReceiptType(e.target.value as any)}
+                    className="w-full glass-input rounded-xl px-3 py-2.5 text-xs text-gray-900 dark:text-white font-semibold"
+                  >
+                    <option value="receipt">Receipt</option>
+                    <option value="invoice">Invoice</option>
+                    <option value="waybill">Waybill</option>
+                    <option value="delivery_receipt">Delivery Receipt</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => { setReceiptType("receipt"); handleReceiptConfirm(); }}
+                  className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black py-3 text-xs shadow-lg active:scale-95 cursor-pointer transition-all uppercase tracking-widest"
+                >
+                  Yes, Print
+                </button>
+                <button
+                  onClick={handleReceiptCancel}
+                  className="rounded-xl border border-white/10 dark:border-zinc-800 bg-white/40 dark:bg-zinc-900/40 hover:bg-white/60 dark:hover:bg-zinc-800 text-gray-800 dark:text-zinc-200 font-black py-3 text-xs active:scale-95 cursor-pointer transition-all uppercase tracking-widest"
+                >
+                  No, Thanks
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
