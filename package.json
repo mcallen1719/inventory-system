@@ -22,7 +22,7 @@
     "express": "^5.2.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
-    "lucide-react": "^0.344.0",
+    "lucide-react": "^0.344.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
