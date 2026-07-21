@@ -20,6 +20,9 @@ create table if not exists public.live_activity (
 alter table public.app_state enable row level security;
 alter table public.live_activity enable row level security;
 
+drop policy if exists "Allow all" on public.app_state;
+drop policy if exists "Allow all" on public.live_activity;
+
 create policy "Allow all" on public.app_state for all using (true) with check (true);
 create policy "Allow all" on public.live_activity for all using (true) with check (true);
 
