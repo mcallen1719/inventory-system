@@ -39,7 +39,7 @@ import StaffDashboard from "./components/StaffDashboard";
 import AdminDashboard from "./components/AdminDashboard";
 import DocumentViewer from "./components/DocumentViewer";
 import LegalModal from "./components/LegalModal";
-import { DBStore } from "./dbStore";
+import { DBStore, supabaseReady } from "./dbStore";
 import { UserRole, CompanySettings, Notification, Job, GeneralPrintingOrder } from "./types";
 import logoUrl from "./assets/images/printopia_logo_1783376948226.jpg";
 
@@ -58,8 +58,13 @@ export default function App() {
   const [activeDocument, setActiveDocument] = useState<{ type: "invoice" | "receipt" | "waybill" | "delivery_receipt"; data: any } | null>(null);
   const [liveActivities, setLiveActivities] = useState<any[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [isSupabaseReady, setIsSupabaseReady] = useState(false);
 
   const handleRefresh = () => setRefreshTrigger(prev => prev + 1);
+
+  useEffect(() => {
+    supabaseReady.then(() => setIsSupabaseReady(true)).catch(() => setIsSupabaseReady(true));
+  }, []);
 
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
@@ -147,9 +152,34 @@ export default function App() {
   };
 
   if (!currentUser) {
+    if (!isSupabaseReady) {
+      return (
+        <div className={`${themeClass} min-h-screen flex items-center justify-center bg-gradient-to-tr from-slate-100 via-slate-50 to-indigo-100/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 font-sans`}>
+          <div className="text-center space-y-4">
+            <div className="h-12 w-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mx-auto shadow-lg animate-pulse">
+              <span className="text-lg font-black">P</span>
+            </div>
+            <p className="text-xs font-black text-gray-600 dark:text-zinc-400 uppercase tracking-widest">Syncing workspace...</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className={themeClass}>
         <LoginScreen onLogin={handleLogin} isDarkMode={isDarkMode} />
+      </div>
+    );
+  }
+
+  if (!isSupabaseReady) {
+    return (
+      <div className={`${themeClass} min-h-screen flex items-center justify-center bg-gradient-to-tr from-slate-100 via-slate-50 to-indigo-100/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 font-sans`}>
+        <div className="text-center space-y-4">
+          <div className="h-12 w-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mx-auto shadow-lg animate-pulse">
+            <span className="text-lg font-black">P</span>
+          </div>
+          <p className="text-xs font-black text-gray-600 dark:text-zinc-400 uppercase tracking-widest">Syncing workspace...</p>
+        </div>
       </div>
     );
   }

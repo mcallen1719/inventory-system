@@ -179,13 +179,18 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
-if (typeof window !== "undefined") {
-  withTimeout(initSupabaseSync(), 8000).catch(() => {});
-  subscribeToSupabase();
-}
+export const supabaseReady: Promise<void> = (() => {
+  if (typeof window === "undefined") return Promise.resolve();
+  return withTimeout(initSupabaseSync(), 8000).then(() => {
+    subscribeToSupabase();
+  }).catch(() => {
+    subscribeToSupabase();
+  });
+})();
+
+export { isSupabaseEnabled, supabase };
 
 function subscribeToSupabase() {
-  if (!isSupabaseEnabled() || supabaseChannel) return;
   supabaseChannel = supabase!.channel("app_state_changes")
     .on("postgres_changes", { event: "*", schema: "public", table: "app_state" }, (payload: any) => {
       if (payload.new && payload.new.key) {
@@ -567,17 +572,9 @@ export const DBStore = {
       return acc;
     });
 
-    const existingIds = new Set(migrated.map(a => a.id));
-    const result = [...migrated];
-    DEFAULT_STAFF_ACCOUNTS.forEach(def => {
-      if (!existingIds.has(def.id)) {
-        result.push(def);
-        updated = true;
-      }
-    });
-
+    const result = migrated.length ? migrated : DEFAULT_STAFF_ACCOUNTS;
     if (updated) setStored(KEYS.STAFF, result);
-    return result.length ? result : DEFAULT_STAFF_ACCOUNTS;
+    return result;
   },
 
   saveStaffAccounts(accounts: StaffAccount[]) { setStored(KEYS.STAFF, accounts); },
