@@ -39,7 +39,7 @@ import StaffDashboard from "./components/StaffDashboard";
 import AdminDashboard from "./components/AdminDashboard";
 import DocumentViewer from "./components/DocumentViewer";
 import LegalModal from "./components/LegalModal";
-import { DBStore, supabaseReady } from "./dbStore";
+import { DBStore, supabaseReady, getSupabaseConnectionStatus } from "./dbStore";
 import { UserRole, CompanySettings, Notification, Job, GeneralPrintingOrder } from "./types";
 import logoUrl from "./assets/images/printopia_logo_1783376948226.jpg";
 
@@ -51,7 +51,14 @@ export default function App() {
   const [legalTab, setLegalTab] = useState<"privacy" | "terms">("privacy");
   const [searchQuery, setSearchQuery] = useState("");
   const [showNotifications, setShowNotifications] = useState(false);
-  const [activeTabId, setActiveTabId] = useState<string>("overview");
+  const [activeTabId, setActiveTabId] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const hash = window.location.hash.replace("#", "");
+      const saved = localStorage.getItem("lastActiveTabId");
+      return hash || saved || "overview";
+    }
+    return "overview";
+  });
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -62,9 +69,31 @@ export default function App() {
 
   const handleRefresh = () => setRefreshTrigger(prev => prev + 1);
 
+  const getInitialTab = (role: UserRole) => {
+    const hash = window.location.hash.replace("#", "");
+    const saved = localStorage.getItem("lastActiveTabId");
+    const target = hash || saved || "overview";
+    
+    const adminTabs = ["overview", "inventory", "sales-reports", "statistics", "expenditures", "eod", "audit", "staff-activity", "security", "late-notes", "settings", "admin-guide"];
+    const staffTabs = ["overview", "gen-print", "job-intake", "kanban", "inventory", "misc", "shift-report", "learning"];
+    
+    if (role === UserRole.ADMIN) {
+      return adminTabs.includes(target) ? target : "overview";
+    } else {
+      return staffTabs.includes(target) ? target : "overview";
+    }
+  };
+
   useEffect(() => {
     supabaseReady.then(() => setIsSupabaseReady(true)).catch(() => setIsSupabaseReady(true));
   }, []);
+
+  useEffect(() => {
+    if (currentUser) {
+      window.location.hash = activeTabId;
+      localStorage.setItem("lastActiveTabId", activeTabId);
+    }
+  }, [activeTabId, currentUser]);
 
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
@@ -91,7 +120,10 @@ export default function App() {
 
   const handleLogin = (role: UserRole, name: string) => {
     setCurrentUser({ name, role });
-    setActiveTabId("overview");
+    const targetTab = getInitialTab(role);
+    setActiveTabId(targetTab);
+    window.location.hash = targetTab;
+    localStorage.setItem("lastActiveTabId", targetTab);
     DBStore.addAuditLog(name, "Login", "Security", `Successfully authenticated into Printopia Digital Press terminal. Session initialized.`);
     DBStore.broadcastLiveActivity(name, "Login", "Security", "Signed in to terminal");
     handleRefresh();
@@ -106,6 +138,8 @@ export default function App() {
     setSearchQuery("");
     setShowNotifications(false);
     setActiveTabId("overview");
+    window.location.hash = "";
+    localStorage.removeItem("lastActiveTabId");
   };
 
   const searchResults = useMemo(() => {
@@ -227,6 +261,16 @@ export default function App() {
             <div className="min-w-0 relative z-10">
               <span className="font-black tracking-tight text-sm text-white block truncate leading-tight">{settings.companyName}</span>
               <span className="text-[9px] text-indigo-400 font-mono font-black uppercase tracking-widest block mt-0.5">{isAdmin ? "Admin Console" : "Staff Desk"}</span>
+              {(() => {
+                const status = getSupabaseConnectionStatus();
+                if (status === "connected") {
+                  return <span className="text-[9px] text-emerald-400 font-mono font-black uppercase tracking-widest block mt-0.5 flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block" /> Synced</span>;
+                }
+                if (status === "disconnected") {
+                  return <span className="text-[9px] text-rose-400 font-mono font-black uppercase tracking-widest block mt-0.5 flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-rose-400 inline-block" /> Local Mode</span>;
+                }
+                return null;
+              })()}
             </div>
           )}
         </div>

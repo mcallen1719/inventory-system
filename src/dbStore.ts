@@ -146,15 +146,56 @@ function setStored<T>(key: string, data: T, emit = true) {
   if (emit && isSupabaseEnabled()) {
     const version = (Number(localStorage.getItem(`__v_${key}`) || 0) + 1);
     try { localStorage.setItem(`__v_${key}`, String(version)); } catch { /* ignore */ }
-    supabase!.from("app_state").upsert({ key, data, version, updated_at: new Date().toISOString() });
+    syncToSupabase(key, data, version);
   }
 }
 
+async function syncToSupabase(key: string, data: any, version: number, attempt = 1) {
+  const maxAttempts = 3;
+  try {
+    const { error } = await supabase!.from("app_state").upsert({ key, data, version, updated_at: new Date().toISOString() });
+    if (error) throw error;
+  } catch (err) {
+    if (attempt < maxAttempts) {
+      setTimeout(() => syncToSupabase(key, data, version, attempt + 1), 1000 * attempt);
+    } else {
+      console.error(`Supabase sync failed for ${key} after ${maxAttempts} attempts:`, err);
+    }
+  }
+}
+
+type ConnectionStatus = "unknown" | "connected" | "disconnected";
+let connectionStatus: ConnectionStatus = "unknown";
+
+export const getSupabaseConnectionStatus = (): ConnectionStatus => connectionStatus;
+
 async function initSupabaseSync() {
-  if (!isSupabaseEnabled()) return;
+  if (!isSupabaseEnabled()) {
+    try {
+      const res = await fetch("/api/config");
+      if (res.ok) {
+        const config = await res.json();
+        if (config.supabaseUrl && config.supabaseAnonKey) {
+          const { initSupabase } = await import("./supabaseClient");
+          initSupabase(config.supabaseUrl, config.supabaseAnonKey);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch runtime config:", e);
+    }
+  }
+
+  if (!isSupabaseEnabled()) {
+    connectionStatus = "disconnected";
+    return;
+  }
   try {
     const { data, error } = await supabase!.from("app_state").select("key, data, version");
-    if (error || !data) return;
+    if (error || !data) {
+      connectionStatus = "disconnected";
+      return;
+    }
+    connectionStatus = "connected";
     let updated = false;
     for (const row of data) {
       const localVersion = Number(localStorage.getItem(`__v_${row.key}`) || "0");
@@ -165,11 +206,31 @@ async function initSupabaseSync() {
         updated = true;
       }
     }
+
+    // Fetch last 50 activities from live_activity table to populate local activity history
+    try {
+      const { data: activityData, error: activityError } = await supabase!
+        .from("live_activity")
+        .select("data")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (activityData && !activityError) {
+        const activities = activityData.map(row => row.data);
+        localStorage.setItem(KEYS.LIVE_ACTIVITY, JSON.stringify(activities));
+        updated = true;
+      }
+    } catch (e) {
+      console.warn("Failed to fetch live activity history from Supabase:", e);
+    }
+
     if (updated) {
       const event = new CustomEvent("printopia-sync", { detail: { key: "printing_db_init" } });
       window.dispatchEvent(event);
     }
-  } catch (err) { console.error("Failed to init from Supabase:", err); }
+  } catch (err) {
+    connectionStatus = "disconnected";
+    console.error("Failed to init from Supabase:", err);
+  }
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -191,6 +252,7 @@ export const supabaseReady: Promise<void> = (() => {
 export { isSupabaseEnabled, supabase };
 
 function subscribeToSupabase() {
+  if (!isSupabaseEnabled()) return;
   supabaseChannel = supabase!.channel("app_state_changes")
     .on("postgres_changes", { event: "*", schema: "public", table: "app_state" }, (payload: any) => {
       if (payload.new && payload.new.key) {

@@ -730,11 +730,6 @@ export default function StaffDashboard({
   const [gpSpecialAmount, setGpSpecialAmount] = useState(0);
   const [gpSpecialList, setGpSpecialList] = useState<Array<{ description: string; quantity: number; amount: number }>>([]);
 
-  // Receipt prompt after adding special service
-  const [showReceiptPrompt, setShowReceiptPrompt] = useState(false);
-  const [receiptType, setReceiptType] = useState<"invoice" | "receipt" | "waybill" | "delivery_receipt">("receipt");
-  const [pendingServiceData, setPendingServiceData] = useState<{ description: string; quantity: number; amount: number } | null>(null);
-
   const addGpSpecialService = () => {
     if (!gpSpecialDesc || gpSpecialAmount <= 0) return;
     const newService = {
@@ -749,33 +744,6 @@ export default function StaffDashboard({
     DBStore.addNotification("service_added", `Service Added: "${newService.description}" (Qty: ${newService.quantity}) - ${currency} ${newService.amount.toFixed(2)}`);
     DBStore.broadcastLiveActivity(activeUserName, "Add", "Special Service", `Added service: ${newService.description}`);
     onRefreshGlobalState();
-    setPendingServiceData(newService);
-    setShowReceiptPrompt(true);
-  };
-
-  const handleReceiptConfirm = () => {
-    if (!pendingServiceData) return;
-    const now = new Date();
-    onOpenDocument(receiptType, {
-      id: `srv-${now.getTime()}`,
-      receiptNumber: `REC-${now.toISOString().split("T")[0].replace(/-/g, "")}-${now.getTime().toString().slice(-4)}`,
-      customerName: gpCustomer && gpCustomer.trim() ? gpCustomer : "Walk-In",
-      date: now.toISOString().split("T")[0],
-      items: [{ description: pendingServiceData.description, total: pendingServiceData.amount }],
-      grandTotal: pendingServiceData.amount,
-      paymentAmount: pendingServiceData.amount,
-      balance: 0,
-      cashier: activeUserName,
-      barcodeData: pendingServiceData.description,
-      qrCodeData: `${pendingServiceData.description}|${pendingServiceData.amount}`
-    });
-    setShowReceiptPrompt(false);
-    setPendingServiceData(null);
-  };
-
-  const handleReceiptCancel = () => {
-    setShowReceiptPrompt(false);
-    setPendingServiceData(null);
   };
 
   const removeGpSpecialService = (idx: number) => {
@@ -824,44 +792,6 @@ export default function StaffDashboard({
   const [showGpReceiptPrompt, setShowGpReceiptPrompt] = useState(false);
   const [gpReceiptType, setGpReceiptType] = useState<"invoice" | "receipt" | "waybill" | "delivery_receipt">("receipt");
   const [pendingGpOrderData, setPendingGpOrderData] = useState<any>(null);
-
-  // Receipt prompt after adding category service (A-F)
-  const [showCatReceiptPrompt, setShowCatReceiptPrompt] = useState(false);
-  const [catReceiptType, setCatReceiptType] = useState<"invoice" | "receipt" | "waybill" | "delivery_receipt">("receipt");
-  const [pendingCatServiceData, setPendingCatServiceData] = useState<{ description: string; amount: number; category: string } | null>(null);
-
-  const addCategoryService = (description: string, amount: number, category: string) => {
-    const serviceData = { description, amount, category };
-    setPendingCatServiceData(serviceData);
-    setCatReceiptType("receipt");
-    setShowCatReceiptPrompt(true);
-  };
-
-  const handleCatReceiptConfirm = () => {
-    if (!pendingCatServiceData) return;
-    const now = new Date();
-    onOpenDocument(catReceiptType, {
-      id: `srv-${now.getTime()}`,
-      receiptNumber: `REC-${now.toISOString().split("T")[0].replace(/-/g, "")}-${now.getTime().toString().slice(-4)}`,
-      customerName: gpCustomer && gpCustomer.trim() ? gpCustomer : "Walk-In",
-      date: now.toISOString().split("T")[0],
-      items: [{ description: pendingCatServiceData.description, total: pendingCatServiceData.amount }],
-      grandTotal: pendingCatServiceData.amount,
-      paymentAmount: pendingCatServiceData.amount,
-      balance: 0,
-      cashier: activeUserName,
-      barcodeData: pendingCatServiceData.description,
-      qrCodeData: `${pendingCatServiceData.description}|${pendingCatServiceData.amount}`,
-      category: pendingCatServiceData.category
-    });
-    setShowCatReceiptPrompt(false);
-    setPendingCatServiceData(null);
-  };
-
-  const handleCatReceiptCancel = () => {
-    setShowCatReceiptPrompt(false);
-    setPendingCatServiceData(null);
-  };
 
   const handleSaveGeneralOrder = (actionType: "invoice" | "receipt" | "prompt") => {
     if (!gpCustomer.trim()) {
@@ -3034,16 +2964,6 @@ export default function StaffDashboard({
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        const total = gpCalculations.photoAmt;
-                        if (total > 0) addCategoryService(`Photocopy Service (${gpPhotoLines.filter(l=>l.quantity>0).map(l=>`${l.type} x${l.quantity}`).join(", ")})`, total, "Photocopy");
-                      }}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 text-[10px] font-black text-blue-700 dark:text-blue-300 px-2.5 py-1.5 cursor-pointer transition uppercase tracking-wider"
-                    >
-                      <PlusCircle className="h-3.5 w-3.5" /> ADD SERVICE
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => setGpPhotoLines([...gpPhotoLines, { id: `ph-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, type: "Custom", quantity: 0, unitPrice: 1.50 }])}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 hover:bg-white/20 text-[10px] font-black text-indigo-700 dark:text-indigo-300 px-2.5 py-1.5 cursor-pointer transition uppercase tracking-wider"
                     >
@@ -3098,16 +3018,6 @@ export default function StaffDashboard({
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        const total = gpCalculations.printAmt;
-                        if (total > 0) addCategoryService(`Digital Printing (${gpPrintLines.filter(l=>l.quantity>0).map(l=>`${l.type} x${l.quantity}`).join(", ")})`, total, "Printing");
-                      }}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-[10px] font-black text-orange-700 dark:text-orange-300 px-2.5 py-1.5 cursor-pointer transition uppercase tracking-wider"
-                    >
-                      <PlusCircle className="h-3.5 w-3.5" /> ADD SERVICE
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => setGpPrintLines([...gpPrintLines, { id: `pr-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, type: "Custom", quantity: 0, unitPrice: 2.50 }])}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 hover:bg-white/20 text-[10px] font-black text-orange-700 dark:text-orange-300 px-2.5 py-1.5 cursor-pointer transition uppercase tracking-wider"
                     >
@@ -3157,19 +3067,7 @@ export default function StaffDashboard({
 
               {/* SECTION C: FRAMES */}
               <div className="p-5 rounded-2xl bg-white/5 dark:bg-zinc-900/15 border border-white/10 space-y-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                  <h4 className="text-xs font-black text-gray-950 dark:text-white uppercase tracking-wider">C. Wood & Glass Frames</h4>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const total = gpCalculations.frameAmt;
-                      if (total > 0) addCategoryService(`Frames (${gpFrameSize}${gpFrameCustomSize ? " - " + gpFrameCustomSize : ""}) x${gpFrameQty}`, total, "Frames");
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-[10px] font-black text-emerald-700 dark:text-emerald-300 px-2.5 py-1.5 cursor-pointer transition uppercase tracking-wider"
-                  >
-                    <PlusCircle className="h-3.5 w-3.5" /> ADD SERVICE
-                  </button>
-                </div>
+                <h4 className="text-xs font-black text-gray-950 dark:text-white uppercase tracking-wider">C. Wood & Glass Frames</h4>
                 <div className="grid grid-cols-4 gap-4">
                   <div>
                     <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Frame Size</label>
@@ -3214,19 +3112,7 @@ export default function StaffDashboard({
 
               {/* SECTION D: T-SHIRTS */}
               <div className="p-5 rounded-2xl bg-white/5 dark:bg-zinc-900/15 border border-white/10 space-y-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                  <h4 className="text-xs font-black text-gray-950 dark:text-white uppercase tracking-wider">D. Apparel & T-Shirts</h4>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const total = gpCalculations.shirtAmt;
-                      if (total > 0) addCategoryService(`T-Shirts (${gpShirtCat || "Custom"}) x${gpShirtQty}`, total, "T-Shirts");
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 text-[10px] font-black text-violet-700 dark:text-violet-300 px-2.5 py-1.5 cursor-pointer transition uppercase tracking-wider"
-                  >
-                    <PlusCircle className="h-3.5 w-3.5" /> ADD SERVICE
-                  </button>
-                </div>
+                <h4 className="text-xs font-black text-gray-950 dark:text-white uppercase tracking-wider">D. Apparel & T-Shirts</h4>
                 <div className="grid grid-cols-4 gap-4">
                   <div>
                     <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Category</label>
@@ -3271,18 +3157,6 @@ export default function StaffDashboard({
                     <div className="col-span-2">
                       <input type="number" step="0.01" placeholder="Amount" value={gpStickAmount || ""} onChange={(e) => setGpStickAmount(Math.max(0, parseFloat(e.target.value) || 0))} className="glass-input w-full" />
                     </div>
-                    <div className="col-span-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const total = gpStickAmount > 0 ? gpStickAmount : gpStickQty * gpStickPrice;
-                          if (total > 0) addCategoryService(`Vinyl Stickers (${gpStickSize || "Custom"}) x${gpStickQty}`, total, "Large Format");
-                        }}
-                        className="w-full rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-[10px] font-black text-amber-700 dark:text-amber-300 px-2 py-1.5 cursor-pointer transition uppercase tracking-wider"
-                      >
-                        ADD SERVICE
-                      </button>
-                    </div>
                   </div>
 
                   {/* Banners */}
@@ -3296,18 +3170,6 @@ export default function StaffDashboard({
                     </div>
                     <div className="col-span-2">
                       <input type="number" step="0.01" placeholder="Amount" value={gpBannerAmount || ""} onChange={(e) => setGpBannerAmount(Math.max(0, parseFloat(e.target.value) || 0))} className="glass-input w-full" />
-                    </div>
-                    <div className="col-span-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const total = gpBannerAmount > 0 ? gpBannerAmount : gpBannerQty * gpBannerPrice;
-                          if (total > 0) addCategoryService(`Heavy Flex Banner (${gpBannerSize || "Custom"}) x${gpBannerQty}`, total, "Large Format");
-                        }}
-                        className="w-full rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-[10px] font-black text-amber-700 dark:text-amber-300 px-2 py-1.5 cursor-pointer transition uppercase tracking-wider"
-                      >
-                        ADD SERVICE
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -3326,18 +3188,6 @@ export default function StaffDashboard({
                     <div className="col-span-3">
                       <input type="number" step="0.01" value={gpDtfA3Price} onChange={(e) => setGpDtfA3Price(Math.max(0, parseFloat(e.target.value) || 0))} className="glass-input w-full" />
                     </div>
-                    <div className="col-span-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const total = gpCalculations.dtfA3Amt;
-                          if (total > 0) addCategoryService(`DTF A3 Film x${gpDtfA3Qty}`, total, "DTF");
-                        }}
-                        className="w-full rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-[10px] font-black text-cyan-700 dark:text-cyan-300 px-2 py-1.5 cursor-pointer transition uppercase tracking-wider"
-                      >
-                        ADD SERVICE
-                      </button>
-                    </div>
                   </div>
 
                   {/* A4 */}
@@ -3348,18 +3198,6 @@ export default function StaffDashboard({
                     </div>
                     <div className="col-span-3">
                       <input type="number" step="0.01" value={gpDtfA4Price} onChange={(e) => setGpDtfA4Price(Math.max(0, parseFloat(e.target.value) || 0))} className="glass-input w-full" />
-                    </div>
-                    <div className="col-span-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const total = gpCalculations.dtfA4Amt;
-                          if (total > 0) addCategoryService(`DTF A4 Film x${gpDtfA4Qty}`, total, "DTF");
-                        }}
-                        className="w-full rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-[10px] font-black text-cyan-700 dark:text-cyan-300 px-2 py-1.5 cursor-pointer transition uppercase tracking-wider"
-                      >
-                        ADD SERVICE
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -5243,60 +5081,6 @@ export default function StaffDashboard({
         )}
       </AnimatePresence>
 
-      {/* Receipt Prompt Modal */}
-      {showReceiptPrompt && pendingServiceData && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl p-6 space-y-5">
-            <div className="text-center space-y-2">
-              <div className="h-12 w-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-lg">
-                <CheckCircle className="h-6 w-6" />
-              </div>
-              <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Service Added Successfully</h3>
-              <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
-                {pendingServiceData.description} — {currency} {pendingServiceData.amount.toFixed(2)}
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <p className="text-xs font-bold text-gray-800 dark:text-white text-center">
-                Would you like to generate a receipt?
-              </p>
-
-              {receiptType !== "none" && (
-                <div className="space-y-1.5">
-                  <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest">Select Document Type</label>
-                  <select
-                    value={receiptType}
-                    onChange={(e) => setReceiptType(e.target.value as any)}
-                    className="w-full glass-input rounded-xl px-3 py-2.5 text-xs text-gray-900 dark:text-white font-semibold"
-                  >
-                    <option value="receipt">Receipt</option>
-                    <option value="invoice">Invoice</option>
-                    <option value="waybill">Waybill</option>
-                    <option value="delivery_receipt">Delivery Receipt</option>
-                  </select>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => { setReceiptType("receipt"); handleReceiptConfirm(); }}
-                  className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black py-3 text-xs shadow-lg active:scale-95 cursor-pointer transition-all uppercase tracking-widest"
-                >
-                  Yes, Print
-                </button>
-                <button
-                  onClick={handleReceiptCancel}
-                  className="rounded-xl border border-white/10 dark:border-zinc-800 bg-white/40 dark:bg-zinc-900/40 hover:bg-white/60 dark:hover:bg-zinc-800 text-gray-800 dark:text-zinc-200 font-black py-3 text-xs active:scale-95 cursor-pointer transition-all uppercase tracking-widest"
-                >
-                  No, Thanks
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* General Order Receipt Prompt Modal */}
       {showGpReceiptPrompt && pendingGpOrderData && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -5339,58 +5123,6 @@ export default function StaffDashboard({
                 </button>
                 <button
                   onClick={handleGpReceiptCancel}
-                  className="rounded-xl border border-white/10 dark:border-zinc-800 bg-white/40 dark:bg-zinc-900/40 hover:bg-white/60 dark:hover:bg-zinc-800 text-gray-800 dark:text-zinc-200 font-black py-3 text-xs active:scale-95 cursor-pointer transition-all uppercase tracking-widest"
-                >
-                  No, Thanks
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Category Service Receipt Prompt Modal */}
-      {showCatReceiptPrompt && pendingCatServiceData && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl p-6 space-y-5">
-            <div className="text-center space-y-2">
-              <div className="h-12 w-12 rounded-2xl bg-indigo-500 text-white flex items-center justify-center mx-auto shadow-lg">
-                <PlusCircle className="h-6 w-6" />
-              </div>
-              <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Service Added</h3>
-              <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
-                {pendingCatServiceData.description} — {currency} {pendingCatServiceData.amount.toFixed(2)}
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <p className="text-xs font-bold text-gray-800 dark:text-white text-center">
-                Would you like to generate a receipt?
-              </p>
-
-              <div className="space-y-1.5">
-                <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest">Select Document Type</label>
-                <select
-                  value={catReceiptType}
-                  onChange={(e) => setCatReceiptType(e.target.value as any)}
-                  className="w-full glass-input rounded-xl px-3 py-2.5 text-xs text-gray-900 dark:text-white font-semibold"
-                >
-                  <option value="receipt">Receipt</option>
-                  <option value="invoice">Invoice</option>
-                  <option value="waybill">Waybill</option>
-                  <option value="delivery_receipt">Delivery Receipt</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={handleCatReceiptConfirm}
-                  className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black py-3 text-xs shadow-lg active:scale-95 cursor-pointer transition-all uppercase tracking-widest"
-                >
-                  Yes, Print
-                </button>
-                <button
-                  onClick={handleCatReceiptCancel}
                   className="rounded-xl border border-white/10 dark:border-zinc-800 bg-white/40 dark:bg-zinc-900/40 hover:bg-white/60 dark:hover:bg-zinc-800 text-gray-800 dark:text-zinc-200 font-black py-3 text-xs active:scale-95 cursor-pointer transition-all uppercase tracking-widest"
                 >
                   No, Thanks
