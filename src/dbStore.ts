@@ -20,13 +20,13 @@ import {
   DeletedJob
 } from "./types";
 import { supabase, isSupabaseEnabled } from "./supabaseClient";
-import { io, Socket } from "socket.io-client";
+import { io } from "socket.io-client";
 
 // Supabase real-time subscription handle
 let supabaseChannel: any = null;
 
 // Socket.IO sync
-let socket: Socket | null = null;
+let socket: any = null;
 let socketReady = false;
 const SOCKET_KEYS = [
   "printing_db_jobs",
@@ -53,13 +53,6 @@ function getSyncServerUrl(): string {
       if (pairing.serverUrl && pairing.serverUrl.trim().length > 0) {
         return pairing.serverUrl.trim();
       }
-    }
-  } catch { /* ignore */ }
-  try {
-    const settings = DBStore.getSettings();
-    const configured = settings.syncServerUrl;
-    if (configured && configured.trim().length > 0) {
-      return configured.trim();
     }
   } catch { /* ignore */ }
   try {
