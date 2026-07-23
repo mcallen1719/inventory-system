@@ -17,10 +17,10 @@ export function initSupabase(url: string, anonKey: string) {
 
 // Try build-time environment variables first (Vite will statically replace these if defined during build)
 const BUILD_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const BUILD_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const BUILD_SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-if (BUILD_SUPABASE_URL && BUILD_SUPABASE_ANON_KEY) {
-  initSupabase(BUILD_SUPABASE_URL, BUILD_SUPABASE_ANON_KEY);
+if (BUILD_SUPABASE_URL && BUILD_SUPABASE_KEY) {
+  initSupabase(BUILD_SUPABASE_URL, BUILD_SUPABASE_KEY);
 }
 
 export const isSupabaseEnabled = (): boolean => supabase !== null;

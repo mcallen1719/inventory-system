@@ -20,9 +20,146 @@ import {
   DeletedJob
 } from "./types";
 import { supabase, isSupabaseEnabled } from "./supabaseClient";
+import { io, Socket } from "socket.io-client";
 
 // Supabase real-time subscription handle
 let supabaseChannel: any = null;
+
+// Socket.IO sync
+let socket: Socket | null = null;
+let socketReady = false;
+const SOCKET_KEYS = [
+  "printing_db_jobs",
+  "printing_db_general_orders",
+  "printing_db_inventory",
+  "printing_db_expenditures",
+  "printing_db_daily_misc",
+  "printing_db_daily_sales",
+  "printing_db_audit_logs",
+  "printing_db_notifications",
+  "printing_db_settings",
+  "printing_db_staff_accounts",
+  "printing_db_staff_notes",
+  "printing_db_staff_attendance",
+  "printing_db_deleted_jobs",
+  "printing_db_live_activity"
+];
+
+function getSyncServerUrl(): string {
+  try {
+    const pairingRaw = localStorage.getItem("printing_db_sync_pairing");
+    if (pairingRaw) {
+      const pairing = JSON.parse(pairingRaw);
+      if (pairing.serverUrl && pairing.serverUrl.trim().length > 0) {
+        return pairing.serverUrl.trim();
+      }
+    }
+  } catch { /* ignore */ }
+  try {
+    const settings = DBStore.getSettings();
+    const configured = settings.syncServerUrl;
+    if (configured && configured.trim().length > 0) {
+      return configured.trim();
+    }
+  } catch { /* ignore */ }
+  try {
+    const runtime = (window as any).__PRINTOPIA_RUNTIME_CONFIG__;
+    if (runtime && runtime.backendUrl && runtime.backendUrl.trim().length > 0) {
+      return runtime.backendUrl.trim();
+    }
+  } catch { /* ignore */ }
+  try {
+    const { protocol, hostname, port } = window.location;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    if (isLocal && port && port !== "3001") {
+      return `${protocol}//${hostname}:3001`;
+    }
+  } catch { /* ignore */ }
+  return window.location.origin;
+}
+
+function initSocketSync() {
+  const url = getSyncServerUrl();
+  if (!url) return;
+  try {
+    socket = io(url, {
+      transports: ["websocket", "polling"],
+      reconnectionAttempts: 20,
+      reconnectionDelay: 1000,
+      timeout: 10000
+    });
+
+    socket.on("connect", () => {
+      console.log("Sync server connected:", url);
+      socketReady = true;
+    });
+
+    socket.on("disconnect", () => {
+      console.log("Sync server disconnected");
+      socketReady = false;
+    });
+
+    socket.on("connect_error", (err) => {
+      console.error("Sync server connection error:", err.message);
+      socketReady = false;
+    });
+
+    socket.on("db_full_sync", (payload: Record<string, any>) => {
+      if (!payload || typeof payload !== "object") return;
+      let updated = false;
+      for (const key in payload) {
+        if (key.startsWith("__v_")) continue;
+        const data = payload[key];
+        if (data !== undefined && data !== null) {
+          localStorage.setItem(key, JSON.stringify(data));
+          updated = true;
+        }
+      }
+      if (updated) {
+        const event = new CustomEvent("printopia-sync", { detail: { key: "printing_db_init" } });
+        window.dispatchEvent(event);
+      }
+    });
+
+    socket.on("db_update", (payload: { key: string; data: any }) => {
+      const { key, data } = payload;
+      if (!key || !SOCKET_KEYS.includes(key)) return;
+      if (data === undefined || data === null) return;
+      localStorage.setItem(key, JSON.stringify(data));
+      const event = new CustomEvent("printopia-sync", { detail: { key } });
+      window.dispatchEvent(event);
+    });
+
+    socket.on("live_activity", (activity: any) => {
+      const activities = getStored<any[]>(KEYS.LIVE_ACTIVITY, []);
+      activities.unshift(activity);
+      if (activities.length > 50) activities.pop();
+      localStorage.setItem(KEYS.LIVE_ACTIVITY, JSON.stringify(activities));
+      const event = new CustomEvent("printopia-sync", { detail: { key: KEYS.LIVE_ACTIVITY } });
+      window.dispatchEvent(event);
+    });
+  } catch (e) {
+    console.error("Failed to init socket sync:", e);
+  }
+}
+
+function emitSocketUpdate(key: string, data: any) {
+  if (!socket || !socketReady) return;
+  try {
+    socket.emit("db_update", { key, data });
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+function emitSocketActivity(activity: any) {
+  if (!socket || !socketReady) return;
+  try {
+    socket.emit("live_activity", activity);
+  } catch (e) {
+    /* ignore */
+  }
+}
 
 // Helper keys for LocalStorage
 const KEYS = {
@@ -143,10 +280,13 @@ function getStored<T>(key: string, seed: T): T {
 
 function setStored<T>(key: string, data: T, emit = true) {
   localStorage.setItem(key, JSON.stringify(data));
-  if (emit && isSupabaseEnabled()) {
-    const version = (Number(localStorage.getItem(`__v_${key}`) || 0) + 1);
-    try { localStorage.setItem(`__v_${key}`, String(version)); } catch { /* ignore */ }
-    syncToSupabase(key, data, version);
+  if (emit) {
+    emitSocketUpdate(key, data);
+    if (isSupabaseEnabled()) {
+      const version = (Number(localStorage.getItem(`__v_${key}`) || 0) + 1);
+      try { localStorage.setItem(`__v_${key}`, String(version)); } catch { /* ignore */ }
+      syncToSupabase(key, data, version);
+    }
   }
 }
 
@@ -674,6 +814,10 @@ export const DBStore = {
   },
 
   requestFullSync() {
+    if (socket && socketReady) {
+      socket.emit("db_request_all");
+      return;
+    }
     if (!isSupabaseEnabled()) return;
     supabase!.from("app_state").select("key, data, version").then(({ data }: any) => {
       if (!data) return;
@@ -687,6 +831,10 @@ export const DBStore = {
   },
 
   async clearAllSharedData(user: string): Promise<boolean> {
+    if (socket && socketReady) {
+      socket.emit("db_clear_all");
+      return true;
+    }
     if (!isSupabaseEnabled()) return false;
     try {
       await supabase!.from("app_state").delete().neq("key", "");
@@ -702,8 +850,14 @@ export const DBStore = {
     activities.unshift(entry);
     if (activities.length > 50) activities.pop();
     localStorage.setItem(KEYS.LIVE_ACTIVITY, JSON.stringify(activities));
+    emitSocketActivity(entry);
     if (isSupabaseEnabled()) { supabase!.from("live_activity").insert({ id: entry.id, data: entry }); }
   },
 
   getLiveActivities(): any[] { return getStored<any[]>(KEYS.LIVE_ACTIVITY, []); }
 };
+
+if (typeof window !== "undefined") {
+  initSocketSync();
+  supabaseReady.catch(() => {});
+}
