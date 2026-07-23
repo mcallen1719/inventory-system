@@ -101,7 +101,10 @@ async function persistToSupabase(key, data) {
 
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
-  socket.emit('db_full_sync', getServerState());
+  console.log('Client origin:', socket.handshake.headers.origin || 'unknown');
+  const state = getServerState();
+  console.log('Sending full sync with keys:', Object.keys(state).length);
+  socket.emit('db_full_sync', state);
 
   socket.on('db_update', async (payload) => {
     const { key, data } = payload;

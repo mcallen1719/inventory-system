@@ -80,6 +80,7 @@ function getSyncServerUrl(): string {
 
 function initSocketSync() {
   const url = getSyncServerUrl();
+  console.log("[Sync] Socket sync init, target URL:", url);
   if (!url) return;
   try {
     socket = io(url, {
@@ -87,6 +88,54 @@ function initSocketSync() {
       reconnectionAttempts: 20,
       reconnectionDelay: 1000,
       timeout: 10000
+    });
+
+    socket.on("connect", () => {
+      console.log("[Sync] Socket connected:", socket?.id);
+      socketReady = true;
+    });
+
+    socket.on("disconnect", () => {
+      console.log("[Sync] Socket disconnected");
+      socketReady = false;
+    });
+
+    socket.on("connect_error", (err) => {
+      console.error("[Sync] Socket connection error:", err.message);
+      socketReady = false;
+    });
+
+    socket.on("connect", () => {
+      console.log("[Sync] Socket connected:", socket?.id);
+      socketReady = true;
+    });
+
+    socket.on("disconnect", () => {
+      console.log("[Sync] Socket disconnected");
+      socketReady = false;
+    });
+
+    socket.on("connect_error", (err) => {
+      console.error("[Sync] Socket connection error:", err.message);
+      socketReady = false;
+    });
+
+    socket.on("db_full_sync", (payload) => {
+      console.log("[Sync] Full sync received, keys:", payload && Object.keys(payload).length);
+      if (!payload || typeof payload !== "object") return;
+      let updated = false;
+      for (const key in payload) {
+        if (key.startsWith("__v_")) continue;
+        const data = payload[key];
+        if (data !== undefined && data !== null) {
+          localStorage.setItem(key, JSON.stringify(data));
+          updated = true;
+        }
+      }
+      if (updated) {
+        const event = new CustomEvent("printopia-sync", { detail: { key: "printing_db_init" } });
+        window.dispatchEvent(event);
+      }
     });
 
     socket.on("connect", () => {
