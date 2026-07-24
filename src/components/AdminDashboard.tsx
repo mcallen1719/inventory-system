@@ -60,15 +60,25 @@ interface DeleteWorkTableProps {
 function DeleteWorkTable({ currency, onRefresh }: DeleteWorkTableProps) {
   const activities = DBStore.getAdminDeletableActivities();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [viewingReceipt, setViewingReceipt] = useState<string>("");
 
-  const handleDelete = (id: string, ref: string) => {
+  const handleDelete = (id: string, ref: string, type: string, reportedId?: string) => {
     if (!window.confirm(`Permanently delete this entry?\n\nRef: ${ref}\n\nThis cannot be undone.`)) return;
     setDeletingId(id);
     setTimeout(() => {
-      DBStore.deleteReportedActivity(id, "Admin");
+      let success = false;
+      if (reportedId) {
+        success = DBStore.deleteReportedActivity(reportedId, "Admin");
+      } else {
+        success = DBStore.deleteAnyActivity(type, id, "Admin");
+      }
       setDeletingId(null);
       onRefresh();
-      alert("Entry deleted successfully.");
+      if (success) {
+        alert("Entry deleted successfully.");
+      } else {
+        alert("Failed to delete entry. It may have already been removed.");
+      }
     }, 300);
   };
 
@@ -84,6 +94,7 @@ function DeleteWorkTable({ currency, onRefresh }: DeleteWorkTableProps) {
               <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Staff</th>
               <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider text-right">Amount</th>
               <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Created</th>
+              <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Receipt</th>
               <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Status</th>
               <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider text-center">Action</th>
             </tr>
@@ -91,7 +102,7 @@ function DeleteWorkTable({ currency, onRefresh }: DeleteWorkTableProps) {
           <tbody className="divide-y divide-white/5">
             {activities.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 dark:text-zinc-500">
+                <td colSpan={9} className="px-4 py-8 text-center text-gray-400 dark:text-zinc-500">
                   No staff activities recorded in the last 24 hours.
                 </td>
               </tr>
@@ -109,8 +120,20 @@ function DeleteWorkTable({ currency, onRefresh }: DeleteWorkTableProps) {
                   <td className="px-4 py-3 text-gray-600 dark:text-zinc-400">{a.customer}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-zinc-400">{a.staffName}</td>
                   <td className="px-4 py-3 text-right font-black text-gray-900 dark:text-white">{currency} {(a.amount || 0).toFixed(2)}</td>
-                  <td className="px-4 py-3 text-gray-500 dark:text-zinc-500">{a.timestamp ? new Date(a.timestamp).toLocaleString() : "—"}</td>
-                  <td className="px-4 py-3">
+                            <td className="px-4 py-3 text-gray-500 dark:text-zinc-500">{a.timestamp ? new Date(a.timestamp).toLocaleString() : "—"}</td>
+                            <td className="px-4 py-3 text-center">
+                              {a.receiptUrl ? (
+                                <button
+                                  onClick={() => setViewingReceipt(a.receiptUrl)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-indigo-500/20 transition"
+                                >
+                                  View
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-gray-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
                     {a.isLocked ? (
                       <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-gray-500/10 text-gray-500 px-2 py-1 rounded-full">
                         Locked
@@ -128,7 +151,7 @@ function DeleteWorkTable({ currency, onRefresh }: DeleteWorkTableProps) {
                   <td className="px-4 py-3 text-center">
                     {!a.isLocked && (
                       <button
-                        onClick={() => handleDelete(a.id, a.ref)}
+                        onClick={() => handleDelete(a.id, a.ref, a.type, a.reportedId)}
                         disabled={deletingId === a.id}
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider transition disabled:opacity-50 cursor-pointer"
                       >
@@ -142,6 +165,20 @@ function DeleteWorkTable({ currency, onRefresh }: DeleteWorkTableProps) {
           </tbody>
         </table>
       </div>
+
+      {viewingReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setViewingReceipt("")}>
+          <div className="max-w-3xl max-h-[90vh] overflow-auto rounded-2xl border border-white/10 bg-white p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-black text-gray-900 uppercase tracking-tight">Receipt Evidence</h3>
+              <button onClick={() => setViewingReceipt("")} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <img src={viewingReceipt} alt="Receipt" className="max-w-full max-h-[70vh] object-contain rounded-xl" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

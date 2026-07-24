@@ -2132,6 +2132,17 @@ export default function StaffDashboard({
   const [miscDesc, setMiscDesc] = useState("");
   const [miscPurpose, setMiscPurpose] = useState("Office Supplies");
   const [miscAmount, setMiscAmount] = useState(0);
+  const [miscReceipt, setMiscReceipt] = useState<string>("");
+
+  const handleMiscReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setMiscReceipt(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSaveMisc = () => {
     if (!miscItem.trim() || miscAmount <= 0) {
@@ -2147,7 +2158,8 @@ export default function StaffDashboard({
       description: miscDesc,
       purpose: miscPurpose,
       amount: miscAmount,
-      staffName: activeUserName
+      staffName: activeUserName,
+      receiptUrl: miscReceipt || undefined
     });
 
     // Save audit log for minor expenditures tracking
@@ -2161,6 +2173,7 @@ export default function StaffDashboard({
     setMiscItem("");
     setMiscDesc("");
     setMiscAmount(0);
+    setMiscReceipt("");
 
     onRefreshGlobalState();
     alert("Miscellaneous local expense logged successfully!");
@@ -3879,14 +3892,28 @@ export default function StaffDashboard({
                 <input type="text" value={miscDesc} onChange={(e) => setMiscDesc(e.target.value)} placeholder="Provide quick description" className="glass-input w-full" />
               </div>
 
-              {/* Mock File Upload */}
+              {/* Receipt Upload */}
               <div>
                 <label className="block font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1.5">Receipt Upload (Optional)</label>
-                <div className="border border-dashed border-white/10 rounded-2xl bg-white/5 p-4 text-center cursor-pointer hover:bg-white/10 hover:border-white/20 transition-all duration-200">
-                  <UploadCloud className="h-6 w-6 mx-auto text-gray-400 mb-1" />
-                  <span className="text-[10px] text-gray-700 dark:text-zinc-300 font-black uppercase tracking-widest block">Click or Drag invoice image</span>
-                  <span className="text-[8px] text-gray-400 font-bold uppercase tracking-widest block mt-0.5">JPG, PNG, PDF (Max 2MB)</span>
-                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleMiscReceiptChange}
+                  className="block w-full text-[10px] text-gray-400 dark:text-zinc-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:uppercase file:tracking-wider file:bg-white/10 file:text-gray-700 dark:file:text-zinc-300 hover:file:bg-white/20 cursor-pointer"
+                />
+                {miscReceipt && (
+                  <div className="mt-2 relative inline-block">
+                    <img src={miscReceipt} alt="Receipt preview" className="h-24 w-auto rounded-xl border border-white/10 object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setMiscReceipt("")}
+                      className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center cursor-pointer"
+                    >
+                      X
+                    </button>
+                  </div>
+                )}
               </div>
 
               <button onClick={handleSaveMisc} className="w-full rounded-xl bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-rose-500/15 cursor-pointer active:scale-95 transition-all duration-200">
@@ -3924,7 +3951,7 @@ export default function StaffDashboard({
                     </td>
                     <td className="py-3.5 font-bold">{misc.staffName}</td>
                     <td className="py-3.5 text-right font-black text-rose-500">
-                      {currency} {misc.amount.toFixed(2)}
+                      {currency} {(misc.amount || 0).toFixed(2)}
                     </td>
                   </tr>
                 ))}
