@@ -32,7 +32,8 @@ import {
   MessageSquare,
   GraduationCap,
   UserCheck,
-  BookOpen
+  BookOpen,
+  Trash2
 } from "lucide-react";
 import LoginScreen from "./components/LoginScreen";
 import StaffDashboard from "./components/StaffDashboard";
@@ -74,7 +75,7 @@ export default function App() {
     const saved = localStorage.getItem("lastActiveTabId");
     const target = hash || saved || "overview";
     
-    const adminTabs = ["overview", "inventory", "sales-reports", "statistics", "expenditures", "eod", "audit", "staff-activity", "security", "late-notes", "settings", "admin-guide"];
+    const adminTabs = ["overview", "inventory", "sales-reports", "statistics", "expenditures", "eod", "audit", "staff-activity", "security", "late-notes", "settings", "admin-guide", "delete-work"];
     const staffTabs = ["overview", "gen-print", "job-intake", "kanban", "inventory", "misc", "shift-report", "learning"];
     
     if (role === UserRole.ADMIN) {
@@ -234,6 +235,7 @@ export default function App() {
         { id: "late-notes", label: "Late Arrival Notes", icon: Clock },
         { id: "settings", label: "Global Settings", icon: Settings },
         { id: "admin-guide", label: "Admin Guide", icon: BookOpen },
+        { id: "delete-work", label: "Delete Work", icon: Trash2 },
       ]
     : [
         { id: "overview", label: "Dashboard", icon: ClipboardList },

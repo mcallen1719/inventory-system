@@ -17,7 +17,8 @@ import {
   KanbanStage,
   StaffAccount,
   StaffNote,
-  DeletedJob
+  DeletedJob,
+  ReportedActivity
 } from "./types";
 import { supabase, isSupabaseEnabled } from "./supabaseClient";
 import { io } from "socket.io-client";
@@ -42,7 +43,8 @@ const SOCKET_KEYS = [
   "printing_db_staff_notes",
   "printing_db_staff_attendance",
   "printing_db_deleted_jobs",
-  "printing_db_live_activity"
+  "printing_db_live_activity",
+  "printing_db_reported_activities"
 ];
 
 function getSyncServerUrl(): string {
@@ -218,7 +220,8 @@ const KEYS = {
   STAFF_NOTES: "printing_db_staff_notes",
   STAFF_ATTENDANCE: "printing_db_staff_attendance",
   DELETED_JOBS: "printing_db_deleted_jobs",
-  LIVE_ACTIVITY: "printing_db_live_activity"
+  LIVE_ACTIVITY: "printing_db_live_activity",
+  REPORTED_ACTIVITIES: "printing_db_reported_activities"
 };
 
 // Auto-clear demo mockup data on first load of this production release
@@ -239,6 +242,7 @@ if (typeof window !== "undefined" && !localStorage.getItem(CLEAR_DEMO_FLAG) && !
   localStorage.removeItem(KEYS.STAFF_NOTES);
   localStorage.removeItem(KEYS.STAFF_ATTENDANCE);
   localStorage.removeItem(KEYS.DELETED_JOBS);
+  localStorage.removeItem(KEYS.REPORTED_ACTIVITIES);
 }
 
 // Default Staff Accounts
@@ -802,8 +806,8 @@ export const DBStore = {
 
   resetAllData(user: string) {
     Object.values(KEYS).forEach(k => { try { localStorage.removeItem(k); } catch { /* ignore */ } });
-    this.getSettings(); this.getStaffAccounts(); this.getInventory(); this.getJobs(); this.getGeneralPrintingOrders(); this.getExpenditures(); this.getDailyMiscellaneous(); this.getDailySalesReports(); this.getStaffNotes(); this.getStaffAttendance();
-    this.addAuditLog(user, "System Reset", "System Setup", "Full system reset executed. All business data (jobs, orders, expenditures, reports, inventory, notes, attendance) was cleared and factory defaults were restored.");
+    this.getSettings(); this.getStaffAccounts(); this.getInventory(); this.getJobs(); this.getGeneralPrintingOrders(); this.getExpenditures(); this.getDailyMiscellaneous(); this.getDailySalesReports(); this.getStaffNotes(); this.getStaffAttendance(); this.getReportedActivities();
+    this.addAuditLog(user, "System Reset", "System Setup", "Full system reset executed. All business data (jobs, orders, expenditures, reports, inventory, notes, attendance, reported activities) was cleared and factory defaults were restored.");
   },
 
   getStaffAccounts(): StaffAccount[] {
@@ -896,7 +900,157 @@ export const DBStore = {
     if (isSupabaseEnabled()) { supabase!.from("live_activity").insert({ id: entry.id, data: entry }); }
   },
 
-  getLiveActivities(): any[] { return getStored<any[]>(KEYS.LIVE_ACTIVITY, []); }
+  getLiveActivities(): any[] { return getStored<any[]>(KEYS.LIVE_ACTIVITY, []); },
+
+  getReportedActivities(): ReportedActivity[] {
+    return getStored<ReportedActivity[]>(KEYS.REPORTED_ACTIVITIES, []);
+  },
+
+  reportActivity(activityType: ReportedActivity["activityType"], activityId: string, activityRef: string, staffName: string, reason?: string) {
+    const existing = this.getReportedActivities();
+    const alreadyReported = existing.find(r => r.activityId === activityId && r.activityType === activityType);
+    if (alreadyReported) return alreadyReported;
+    const reported: ReportedActivity = {
+      id: `rep-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      activityType,
+      activityId,
+      activityRef,
+      staffName,
+      reportedAt: new Date().toISOString(),
+      reason: reason || "Staff reported wrong sale entry",
+      createdAt: new Date().toISOString()
+    };
+    existing.push(reported);
+    setStored(KEYS.REPORTED_ACTIVITIES, existing);
+    this.addAuditLog(staffName, "Report", "Delete Work", `Reported ${activityType} ${activityRef} for admin review. Reason: ${reported.reason}`);
+    this.addNotification("job_deleted", `Activity Report: ${staffName} reported ${activityType} ${activityRef} for correction. Admin has been alerted.`);
+    return reported;
+  },
+
+  deleteReportedActivity(reportedId: string, adminUser: string) {
+    const reported = this.getReportedActivities().find(r => r.id === reportedId);
+    if (!reported) return false;
+    let deleted = false;
+    if (reported.activityType === "job") {
+      const jobs = this.getJobs();
+      const job = jobs.find(j => j.id === reported.activityId);
+      if (job) {
+        const filtered = jobs.filter(j => j.id !== reported.activityId);
+        setStored(KEYS.JOBS, filtered);
+        const deletedJobs = this.getDeletedJobs();
+        deletedJobs.push({ id: `del-${Date.now()}`, originalJobId: job.id, jobNumber: job.jobNumber, customerName: job.customerName, totalAmount: job.totalAmount, depositPaid: job.depositPaid, deletedBy: adminUser, refundAmount: job.depositPaid, timestamp: new Date().toISOString() });
+        setStored(KEYS.DELETED_JOBS, deletedJobs);
+        deleted = true;
+      }
+    } else if (reported.activityType === "gpo") {
+      const gpos = this.getGeneralPrintingOrders();
+      const gpo = gpos.find(g => g.id === reported.activityId);
+      if (gpo) {
+        const filtered = gpos.filter(g => g.id !== reported.activityId);
+        setStored(KEYS.GPO, filtered);
+        deleted = true;
+      }
+    } else if (reported.activityType === "sales_report") {
+      const reports = this.getDailySalesReports();
+      const report = reports.find(r => r.id === reported.activityId);
+      if (report) {
+        const filtered = reports.filter(r => r.id !== reported.activityId);
+        setStored(KEYS.SALES_REPORTS, filtered);
+        deleted = true;
+      }
+    } else if (reported.activityType === "misc") {
+      const miscs = this.getDailyMiscellaneous();
+      const misc = miscs.find(m => m.id === reported.activityId);
+      if (misc) {
+        const filtered = miscs.filter(m => m.id !== reported.activityId);
+        setStored(KEYS.MISCELLANEOUS, filtered);
+        deleted = true;
+      }
+    }
+    if (deleted) {
+      const all = this.getReportedActivities().filter(r => r.id !== reportedId);
+      setStored(KEYS.REPORTED_ACTIVITIES, all);
+      this.addAuditLog(adminUser, "Delete", "Delete Work", `Deleted reported ${reported.activityType} ${reported.activityRef} originally created by ${reported.staffName}.`);
+      this.broadcastLiveActivity(adminUser, "Delete", "Delete Work", `Deleted reported ${reported.activityType} ${reported.activityRef}`);
+      this.addNotification("job_deleted", `${reported.activityRef} was deleted by ${adminUser} from Delete Work queue.`);
+    }
+    return deleted;
+  },
+
+  getStaffRecentActivities(staffName: string, hours: number = 24): Array<{ type: string; ref: string; customer: string; amount: number; timestamp: string; id: string; staffName: string }> {
+    const cutoff = new Date();
+    cutoff.setHours(cutoff.getHours() - hours);
+    const cutoffStr = cutoff.toISOString();
+    const activities: Array<{ type: string; ref: string; customer: string; amount: number; timestamp: string; id: string; staffName: string }> = [];
+    const staffAccounts = this.getStaffAccounts();
+    const staffNames = staffAccounts.map(s => s.name);
+    if (!staffNames.includes(staffName)) return activities;
+    this.getJobs().forEach(j => {
+      if (j.staffInitials === staffName && j.date + " " + (j.time || "12:00") >= cutoffStr) {
+        activities.push({ type: "Job", ref: j.jobNumber, customer: j.customerName, amount: j.totalAmount, timestamp: j.date + " " + (j.time || "12:00"), id: j.id, staffName: j.staffInitials });
+      }
+    });
+    this.getGeneralPrintingOrders().forEach(o => {
+      if (o.staffName === staffName && o.date + " " + (o.time || "12:00") >= cutoffStr) {
+        activities.push({ type: "GPO", ref: o.orderNumber, customer: o.customerName, amount: o.grandTotal, timestamp: o.date + " " + (o.time || "12:00"), id: o.id, staffName: o.staffName });
+      }
+    });
+    this.getDailySalesReports().forEach(r => {
+      if (r.staffName === staffName && r.date + " " + (r.closingTime || "12:00") >= cutoffStr) {
+        activities.push({ type: "Sales Report", ref: r.shift, customer: r.shift + " Shift", amount: r.totalSales, timestamp: r.date + " " + (r.closingTime || "12:00"), id: r.id, staffName: r.staffName });
+      }
+    });
+    this.getDailyMiscellaneous().forEach(m => {
+      if (m.staffName === staffName && m.date + " 12:00" >= cutoffStr) {
+        activities.push({ type: "Misc", ref: m.item, customer: m.purpose || "Local Expense", amount: m.amount, timestamp: m.date + " 12:00", id: m.id, staffName: m.staffName });
+      }
+    });
+    return activities.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  },
+
+  isActivityLocked(createdAt: string): boolean {
+    const created = new Date(createdAt);
+    const now = new Date();
+    const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
+    return diffHours >= 24;
+  },
+
+  getAdminDeletableActivities(): Array<{ type: string; ref: string; customer: string; amount: number; timestamp: string; id: string; staffName: string; isLocked: boolean; isReported: boolean }> {
+    const activities: Array<{ type: string; ref: string; customer: string; amount: number; timestamp: string; id: string; staffName: string; isLocked: boolean; isReported: boolean }> = [];
+    const reported = this.getReportedActivities();
+    const reportedMap = new Map(reported.map(r => [r.activityId, r]));
+    const staffAccounts = this.getStaffAccounts();
+    const staffNames = staffAccounts.map(s => s.name);
+    this.getJobs().forEach(j => {
+      if (staffNames.includes(j.staffInitials)) {
+        const ts = j.date + " " + (j.time || "12:00");
+        const rep = reportedMap.get(j.id);
+        activities.push({ type: "Job", ref: j.jobNumber, customer: j.customerName, amount: j.totalAmount, timestamp: ts, id: j.id, staffName: j.staffInitials, isLocked: this.isActivityLocked(ts), isReported: !!rep });
+      }
+    });
+    this.getGeneralPrintingOrders().forEach(o => {
+      if (staffNames.includes(o.staffName)) {
+        const ts = o.date + " " + (o.time || "12:00");
+        const rep = reportedMap.get(o.id);
+        activities.push({ type: "GPO", ref: o.orderNumber, customer: o.customerName, amount: o.grandTotal, timestamp: ts, id: o.id, staffName: o.staffName, isLocked: this.isActivityLocked(ts), isReported: !!rep });
+      }
+    });
+    this.getDailySalesReports().forEach(r => {
+      if (staffNames.includes(r.staffName)) {
+        const ts = r.date + " " + (r.closingTime || "12:00");
+        const rep = reportedMap.get(r.id);
+        activities.push({ type: "Sales Report", ref: r.shift + " Shift", customer: r.shift, amount: r.totalSales, timestamp: ts, id: r.id, staffName: r.staffName, isLocked: this.isActivityLocked(ts), isReported: !!rep });
+      }
+    });
+    this.getDailyMiscellaneous().forEach(m => {
+      if (staffNames.includes(m.staffName)) {
+        const ts = m.date + " 12:00";
+        const rep = reportedMap.get(m.id);
+        activities.push({ type: "Misc", ref: m.item, customer: m.purpose || "Local Expense", amount: m.amount, timestamp: ts, id: m.id, staffName: m.staffName, isLocked: this.isActivityLocked(ts), isReported: !!rep });
+      }
+    });
+    return activities.filter(a => !a.isLocked).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }
 };
 
 if (typeof window !== "undefined") {

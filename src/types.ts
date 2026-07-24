@@ -340,5 +340,27 @@ export interface StaffNote {
   sessionType?: "Clock In" | "Clock Out" | "Late Arrival";
 }
 
+export interface ReportedActivity {
+  id: string;
+  activityType: "job" | "gpo" | "sales_report" | "misc";
+  activityId: string;
+  activityRef: string;
+  staffName: string;
+  reportedAt: string;
+  reason?: string;
+  createdAt: string;
+}
+
+export interface ReportedActivity {
+  id: string;
+  activityType: "job" | "gpo" | "sales_report" | "misc";
+  activityId: string;
+  activityRef: string;
+  staffName: string;
+  reportedAt: string;
+  reason?: string;
+  createdAt: string;
+}
+
 
 

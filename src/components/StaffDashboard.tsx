@@ -2425,6 +2425,111 @@ export default function StaffDashboard({
           </div>
 
           {/* ==================================================== */}
+          {/* RECENT ACTIVITIES - REPORT ERROR */}
+          {/* ==================================================== */}
+          {(() => {
+            const recentActivities = DBStore.getStaffRecentActivities(activeUserName, 24);
+            const [reportingId, setReportingId] = React.useState<string | null>(null);
+            const [reportReason, setReportReason] = React.useState("");
+            const handleReport = (id: string, ref: string, type: string) => {
+              if (!reportReason.trim()) {
+                alert("Please enter a reason for reporting this entry.");
+                return;
+              }
+              DBStore.reportActivity(type.toLowerCase().replace(" sales report", "sales_report").replace("gpo", "gpo").replace("job", "job").replace("misc", "misc") as any, id, ref, activeUserName, reportReason.trim());
+              setReportingId(null);
+              setReportReason("");
+              onRefreshGlobalState();
+              alert("Entry reported to Admin for review.");
+            };
+            return (
+              <div className="glass-panel rounded-2xl p-6 relative overflow-hidden paper-texture shadow-xl space-y-4">
+                <div className="cmyk-bar absolute top-0 left-0 right-0 h-[3px]" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-600">
+                      <AlertTriangle className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-gray-950 dark:text-white uppercase tracking-tight">
+                        Recent Activities (24hr Window)
+                      </h3>
+                      <p className="text-[10px] text-gray-500 dark:text-zinc-500 font-bold">
+                        Report any wrong entry to Admin within 24 hours. After 24 hours, entries are locked.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-white/10 bg-white/5">
+                        <th className="px-3 py-2 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Type</th>
+                        <th className="px-3 py-2 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Ref</th>
+                        <th className="px-3 py-2 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Customer</th>
+                        <th className="px-3 py-2 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider text-right">Amount</th>
+                        <th className="px-3 py-2 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Time</th>
+                        <th className="px-3 py-2 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {recentActivities.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-3 py-6 text-center text-gray-400 dark:text-zinc-500">
+                            No activities recorded in the last 24 hours.
+                          </td>
+                        </tr>
+                      ) : recentActivities.map(a => (
+                        <tr key={a.id} className="hover:bg-white/5 transition">
+                          <td className="px-3 py-2 font-bold text-gray-700 dark:text-zinc-300">{a.type}</td>
+                          <td className="px-3 py-2 font-mono font-bold text-indigo-600 dark:text-indigo-400">{a.ref}</td>
+                          <td className="px-3 py-2 text-gray-600 dark:text-zinc-400">{a.customer}</td>
+                          <td className="px-3 py-2 text-right font-black text-gray-900 dark:text-white">{currency} {a.amount.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-gray-500 dark:text-zinc-500">{new Date(a.timestamp).toLocaleString()}</td>
+                          <td className="px-3 py-2 text-center">
+                            {reportingId === a.id ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={reportReason}
+                                  onChange={(e) => setReportReason(e.target.value)}
+                                  placeholder="Reason..."
+                                  className="w-24 px-2 py-1 rounded-md border border-white/20 bg-white/10 text-gray-900 dark:text-white text-[10px] font-bold outline-hidden focus:border-indigo-500"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => handleReport(a.id, a.ref, a.type)}
+                                  className="px-2 py-1 rounded-md bg-rose-500 text-white text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-rose-600 transition"
+                                >
+                                  Send
+                                </button>
+                                <button
+                                  onClick={() => { setReportingId(null); setReportReason(""); }}
+                                  className="px-2 py-1 rounded-md bg-gray-500 text-white text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition"
+                                >
+                                  X
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setReportingId(a.id)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black uppercase tracking-wider transition cursor-pointer"
+                              >
+                                <AlertTriangle className="h-3 w-3" />
+                                Report
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ==================================================== */}
           {/* STAFF CLOCK IN / CLOCK OUT PANEL */}
           {/* ==================================================== */}
           <div className="glass-panel rounded-2xl p-6 relative overflow-hidden paper-texture shadow-xl space-y-4">
