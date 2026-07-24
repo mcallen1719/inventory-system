@@ -5503,8 +5503,8 @@ export default function AdminDashboard({
                             <td className="px-4 py-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">{a.ref}</td>
                             <td className="px-4 py-3 text-gray-600 dark:text-zinc-400">{a.customer}</td>
                             <td className="px-4 py-3 text-gray-600 dark:text-zinc-400">{a.staffName}</td>
-                            <td className="px-4 py-3 text-right font-black text-gray-900 dark:text-white">{currency} {a.amount.toFixed(2)}</td>
-                            <td className="px-4 py-3 text-gray-500 dark:text-zinc-500">{new Date(a.timestamp).toLocaleString()}</td>
+                            <td className="px-4 py-3 text-right font-black text-gray-900 dark:text-white">{currency} {(a.amount || 0).toFixed(2)}</td>
+                            <td className="px-4 py-3 text-gray-500 dark:text-zinc-500">{a.timestamp ? new Date(a.timestamp).toLocaleString() : "—"}</td>
                             <td className="px-4 py-3">
                               {a.isLocked ? (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-gray-500/10 text-gray-500 px-2 py-1 rounded-full">

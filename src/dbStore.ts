@@ -1025,28 +1025,28 @@ export const DBStore = {
       if (staffNames.includes(j.staffInitials)) {
         const ts = j.date + " " + (j.time || "12:00");
         const rep = reportedMap.get(j.id);
-        activities.push({ type: "Job", ref: j.jobNumber, customer: j.customerName, amount: j.totalAmount, timestamp: ts, id: j.id, staffName: j.staffInitials, isLocked: this.isActivityLocked(ts), isReported: !!rep });
+        activities.push({ type: "Job", ref: j.jobNumber || "—", customer: j.customerName || "—", amount: typeof j.totalAmount === "number" ? j.totalAmount : 0, timestamp: ts, id: j.id, staffName: j.staffInitials || "—", isLocked: this.isActivityLocked(ts), isReported: !!rep });
       }
     });
     this.getGeneralPrintingOrders().forEach(o => {
       if (staffNames.includes(o.staffName)) {
         const ts = o.date + " " + (o.time || "12:00");
         const rep = reportedMap.get(o.id);
-        activities.push({ type: "GPO", ref: o.orderNumber, customer: o.customerName, amount: o.grandTotal, timestamp: ts, id: o.id, staffName: o.staffName, isLocked: this.isActivityLocked(ts), isReported: !!rep });
+        activities.push({ type: "GPO", ref: o.orderNumber || "—", customer: o.customerName || "—", amount: typeof o.grandTotal === "number" ? o.grandTotal : 0, timestamp: ts, id: o.id, staffName: o.staffName || "—", isLocked: this.isActivityLocked(ts), isReported: !!rep });
       }
     });
     this.getDailySalesReports().forEach(r => {
       if (staffNames.includes(r.staffName)) {
         const ts = r.date + " " + (r.closingTime || "12:00");
         const rep = reportedMap.get(r.id);
-        activities.push({ type: "Sales Report", ref: r.shift + " Shift", customer: r.shift, amount: r.totalSales, timestamp: ts, id: r.id, staffName: r.staffName, isLocked: this.isActivityLocked(ts), isReported: !!rep });
+        activities.push({ type: "Sales Report", ref: r.shift + " Shift", customer: r.shift, amount: typeof r.totalSales === "number" ? r.totalSales : 0, timestamp: ts, id: r.id, staffName: r.staffName || "—", isLocked: this.isActivityLocked(ts), isReported: !!rep });
       }
     });
     this.getDailyMiscellaneous().forEach(m => {
       if (staffNames.includes(m.staffName)) {
         const ts = m.date + " 12:00";
         const rep = reportedMap.get(m.id);
-        activities.push({ type: "Misc", ref: m.item, customer: m.purpose || "Local Expense", amount: m.amount, timestamp: ts, id: m.id, staffName: m.staffName, isLocked: this.isActivityLocked(ts), isReported: !!rep });
+        activities.push({ type: "Misc", ref: m.item || "—", customer: m.purpose || "Local Expense", amount: typeof m.amount === "number" ? m.amount : 0, timestamp: ts, id: m.id, staffName: m.staffName || "—", isLocked: this.isActivityLocked(ts), isReported: !!rep });
       }
     });
     return activities.filter(a => !a.isLocked).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
