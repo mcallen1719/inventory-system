@@ -40,6 +40,7 @@ import StaffDashboard from "./components/StaffDashboard";
 import AdminDashboard from "./components/AdminDashboard";
 import DocumentViewer from "./components/DocumentViewer";
 import LegalModal from "./components/LegalModal";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { DBStore, supabaseReady, getSupabaseConnectionStatus } from "./dbStore";
 import { UserRole, CompanySettings, Notification, Job, GeneralPrintingOrder } from "./types";
 import logoUrl from "./assets/images/printopia_logo_1783376948226.jpg";
@@ -406,7 +407,9 @@ export default function App() {
               </motion.div>
             ) : (
               <motion.div key="staff" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.2 }}>
-                <StaffDashboard settings={settings} onOpenDocument={(type, data) => setActiveDocument({ type, data })} onRefreshGlobalState={handleRefresh} activeUserName={currentUser?.name} activeTab={activeTabId} setActiveTab={setActiveTabId} refreshTrigger={refreshTrigger} />
+                <ErrorBoundary>
+                  <StaffDashboard settings={settings} onOpenDocument={(type, data) => setActiveDocument({ type, data })} onRefreshGlobalState={handleRefresh} activeUserName={currentUser?.name} activeTab={activeTabId} setActiveTab={setActiveTabId} refreshTrigger={refreshTrigger} />
+                </ErrorBoundary>
               </motion.div>
             )}
           </AnimatePresence>
