@@ -268,6 +268,7 @@ export interface Expenditure {
   unitPrice: number;
   amount: number;
   category: "Printing Materials" | "Office Supplies" | "Fuel" | "Maintenance" | "Utilities" | "Rent" | "Salary" | "Other";
+  receiptUrl?: string;
 }
 
 export interface InventoryItem {

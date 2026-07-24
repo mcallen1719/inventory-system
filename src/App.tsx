@@ -237,6 +237,7 @@ export default function App() {
         { id: "settings", label: "Global Settings", icon: Settings },
         { id: "admin-guide", label: "Admin Guide", icon: BookOpen },
         { id: "delete-work", label: "Delete Work", icon: Trash2 },
+        { id: "receipts", label: "Expense Receipts", icon: Receipt },
       ]
     : [
         { id: "overview", label: "Dashboard", icon: ClipboardList },

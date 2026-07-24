@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { motion } from "motion/react";
 import {
   TrendingUp,
@@ -30,6 +30,8 @@ import {
   MessageSquare,
   CheckCircle,
   BookOpen,
+  UploadCloud,
+  Receipt,
   X
 } from "lucide-react";
 import {
@@ -202,10 +204,12 @@ export default function AdminDashboard({
   setActiveTab: propSetActiveTab,
   refreshTrigger = 0
 }: AdminDashboardProps) {
-  const [internalAdminTab, setInternalAdminTab] = useState<"overview" | "expenditures" | "sales-reports" | "statistics" | "inventory" | "eod" | "audit" | "security" | "late-notes" | "settings" | "delete-work">("overview");
+  const [internalAdminTab, setInternalAdminTab] = useState<"overview" | "expenditures" | "sales-reports" | "statistics" | "inventory" | "eod" | "audit" | "security" | "late-notes" | "settings" | "delete-work" | "receipts">("overview");
 
   const adminTab = (propActiveTab as any) || internalAdminTab;
   const setAdminTab = propSetActiveTab || setInternalAdminTab;
+
+  const [viewingReceipt, setViewingReceipt] = useState<string>("");
 
   // Load live DB stores reactively
   const jobs = useMemo(() => DBStore.getJobs(), [refreshTrigger]);
@@ -731,6 +735,20 @@ export default function AdminDashboard({
   const [expQty, setExpQty] = useState(1);
   const [expPrice, setExpPrice] = useState(0);
   const [expCat, setExpCat] = useState<Expenditure["category"]>("Printing Materials");
+  const [expReceiptFile, setExpReceiptFile] = useState<string>("");
+  const expReceiptRef = React.useRef<HTMLInputElement>(null);
+
+  const handleExpReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      alert("Receipt file must be under 2MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setExpReceiptFile(reader.result as string);
+    reader.readAsDataURL(file);
+  };
 
   const expAmount = expQty * expPrice;
 
@@ -750,7 +768,8 @@ export default function AdminDashboard({
       quantity: expQty,
       unitPrice: expPrice,
       amount: expAmount,
-      category: expCat
+      category: expCat,
+      receiptUrl: expReceiptFile || undefined
     }, "Admin");
 
     // Clear Form
@@ -759,6 +778,8 @@ export default function AdminDashboard({
     setExpSupplier("");
     setExpQty(1);
     setExpPrice(0);
+    setExpReceiptFile("");
+    if (expReceiptRef.current) expReceiptRef.current.value = "";
 
     onRefreshGlobalState();
     alert("Expenditure recorded successfully!");
@@ -2851,7 +2872,8 @@ export default function AdminDashboard({
           { id: "late-notes", label: "Late Arrival Notes", icon: Clock },
           { id: "settings", label: "Global Settings", icon: Settings },
           { id: "admin-guide", label: "Admin Guide", icon: BookOpen },
-          { id: "delete-work", label: "Delete Work", icon: Trash2 }
+          { id: "delete-work", label: "Delete Work", icon: Trash2 },
+          { id: "receipts", label: "Expense Receipts", icon: Receipt }
         ].map((tab) => {
           const Icon = tab.icon;
           const active = adminTab === tab.id;
@@ -3295,6 +3317,25 @@ export default function AdminDashboard({
                 <input type="text" value={expDesc} onChange={(e) => setExpDesc(e.target.value)} placeholder="Provide invoice detail reference" className="w-full glass-input rounded-xl px-3.5 py-2.5 text-xs text-gray-900 dark:text-white font-semibold" />
               </div>
 
+              <div>
+                <label className="block text-[10px] font-black text-indigo-950/80 dark:text-zinc-400 uppercase tracking-wider mb-1.5">Receipt Upload (Optional)</label>
+                <input ref={expReceiptRef} type="file" accept="image/*" onChange={handleExpReceiptChange} className="hidden" />
+                {expReceiptFile ? (
+                  <div className="relative rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-2">
+                    <img src={expReceiptFile} alt="Receipt preview" className="w-full max-h-32 object-contain rounded-lg" />
+                    <button onClick={() => { setExpReceiptFile(""); if (expReceiptRef.current) expReceiptRef.current.value = ""; }} className="absolute top-1 right-1 p-1 rounded-md bg-rose-500 text-white hover:bg-rose-600 cursor-pointer">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <div onClick={() => expReceiptRef.current?.click()} className="border border-dashed border-white/10 rounded-xl bg-white/5 p-3 text-center cursor-pointer hover:bg-white/10 hover:border-white/20 transition-all duration-200">
+                    <UploadCloud className="h-5 w-5 mx-auto text-gray-400 mb-1" />
+                    <span className="text-[9px] text-gray-700 dark:text-zinc-300 font-black uppercase tracking-widest block">Click to upload receipt</span>
+                    <span className="text-[8px] text-gray-400 font-bold uppercase tracking-widest block mt-0.5">JPG, PNG, PDF (Max 2MB)</span>
+                  </div>
+                )}
+              </div>
+
               <button onClick={handleSaveExpenditure} className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-500 hover:to-orange-400 py-3.5 text-xs font-black text-white shadow-lg shadow-orange-500/25 active:scale-95 cursor-pointer transition-all duration-300 uppercase tracking-widest mt-2">
                 Log Shop Expenditure
               </button>
@@ -3321,6 +3362,7 @@ export default function AdminDashboard({
                     <th className="py-3.5 px-4">Category</th>
                     <th className="py-3.5 px-4">Supplier</th>
                     <th className="py-3.5 px-4 text-right">Amount</th>
+                    <th className="py-3.5 px-4 text-center">Receipt</th>
                     <th className="py-3.5 px-4 text-right w-16 rounded-r-xl">Action</th>
                   </tr>
                 </thead>
@@ -3340,6 +3382,15 @@ export default function AdminDashboard({
                       <td className="py-3.5 px-4 font-semibold text-gray-500 dark:text-zinc-400">{exp.supplier}</td>
                       <td className="py-3.5 px-4 text-right font-black text-rose-600 dark:text-rose-400">
                         {currency} {exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        {exp.receiptUrl ? (
+                          <button onClick={() => setViewingReceipt(exp.receiptUrl)} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-indigo-500/20 transition">
+                            View
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <button onClick={() => handleDeleteExpenditure(exp.id)} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 cursor-pointer transition duration-200">
@@ -5589,6 +5640,105 @@ export default function AdminDashboard({
       )}
 
       {/* ----------------------------------------------------
+          EXPENSE RECEIPTS - ALL LOGGED EXPENSES WITH RECEIPT IMAGES
+          ---------------------------------------------------- */}
+      {adminTab === "receipts" && (
+        <div className="space-y-6">
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-indigo-800 via-indigo-900 to-slate-950 p-8 md:p-10 shadow-xl">
+            <div className="absolute -top-10 -right-10 h-48 w-48 rounded-full bg-white/5 blur-2xl" />
+            <div className="relative flex flex-col md:flex-row md:items-center gap-5">
+              <div className="h-16 w-16 shrink-0 rounded-2xl bg-white/10 flex items-center justify-center shadow-lg backdrop-blur-sm">
+                <Receipt className="h-9 w-9 text-white" />
+              </div>
+              <div className="space-y-2">
+                <span className="inline-block text-[10px] font-black uppercase tracking-widest bg-white/10 text-white px-2.5 py-0.5 rounded-full">
+                  Expense Receipts
+                </span>
+                <h2 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">
+                  All Logged Expenses with Receipts
+                </h2>
+                <p className="text-xs md:text-sm text-slate-300 font-medium max-w-3xl leading-relaxed">
+                  Review every expense receipt uploaded by staff and admins in one place. Click <strong>View</strong> to inspect the receipt image for verification.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Admin Expenditures with Receipts */}
+            <div className="glass-panel rounded-2xl p-6 space-y-4 shadow-xl relative overflow-hidden paper-texture">
+              <div className="cmyk-bar absolute top-0 left-0 right-0 h-[3px]" />
+              <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Admin Expenditures</h3>
+              <div className="overflow-x-auto rounded-2xl border border-white/5 shadow-inner">
+                <table className="w-full text-left border-collapse text-xs overflow-hidden">
+                  <thead>
+                    <tr className="bg-gradient-to-r from-blue-500/10 to-indigo-500/10 dark:from-blue-950/45 dark:to-indigo-950/45 text-blue-900 dark:text-blue-300 font-black uppercase tracking-wider text-[10px] border-b border-white/10">
+                      <th className="py-3 px-3 rounded-l-xl">Date</th>
+                      <th className="py-3 px-3">Item</th>
+                      <th className="py-3 px-3 text-right">Amount</th>
+                      <th className="py-3 px-3 text-center rounded-r-xl">Receipt</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-gray-700 dark:text-zinc-300">
+                    {expenditures.filter(e => e.receiptUrl).length === 0 ? (
+                      <tr><td colSpan={4} className="py-6 text-center text-gray-400 dark:text-zinc-500 text-[10px]">No admin expenditures with receipts yet.</td></tr>
+                    ) : expenditures.filter(e => e.receiptUrl).map((exp) => (
+                      <tr key={exp.id} className="hover:bg-white/5 transition-all">
+                        <td className="py-3 px-3 font-mono font-bold text-gray-400 dark:text-zinc-500">{exp.date}</td>
+                        <td className="py-3 px-3 font-bold text-gray-900 dark:text-white">{exp.item}</td>
+                        <td className="py-3 px-3 text-right font-black text-rose-600 dark:text-rose-400">{currency} {exp.amount.toFixed(2)}</td>
+                        <td className="py-3 px-3 text-center">
+                          <button onClick={() => setViewingReceipt(exp.receiptUrl!)} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-indigo-500/20 transition">
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Staff Misc Expenses with Receipts */}
+            <div className="glass-panel rounded-2xl p-6 space-y-4 shadow-xl relative overflow-hidden paper-texture">
+              <div className="cmyk-bar absolute top-0 left-0 right-0 h-[3px]" />
+              <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Staff Daily Expenses</h3>
+              <div className="overflow-x-auto rounded-2xl border border-white/5 shadow-inner">
+                <table className="w-full text-left border-collapse text-xs overflow-hidden">
+                  <thead>
+                    <tr className="bg-gradient-to-r from-rose-500/10 to-orange-500/10 dark:from-rose-950/45 dark:to-orange-950/45 text-rose-900 dark:text-rose-300 font-black uppercase tracking-wider text-[10px] border-b border-white/10">
+                      <th className="py-3 px-3 rounded-l-xl">Date</th>
+                      <th className="py-3 px-3">Item</th>
+                      <th className="py-3 px-3">Staff</th>
+                      <th className="py-3 px-3 text-right">Amount</th>
+                      <th className="py-3 px-3 text-center rounded-r-xl">Receipt</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-gray-700 dark:text-zinc-300">
+                    {miscs.filter(m => m.receiptUrl).length === 0 ? (
+                      <tr><td colSpan={5} className="py-6 text-center text-gray-400 dark:text-zinc-500 text-[10px]">No staff expenses with receipts yet.</td></tr>
+                    ) : miscs.filter(m => m.receiptUrl).map((m) => (
+                      <tr key={m.id} className="hover:bg-white/5 transition-all">
+                        <td className="py-3 px-3 font-mono font-bold text-gray-400 dark:text-zinc-500">{m.date}</td>
+                        <td className="py-3 px-3 font-bold text-gray-900 dark:text-white">{m.item}</td>
+                        <td className="py-3 px-3 text-gray-600 dark:text-zinc-400">{m.staffName}</td>
+                        <td className="py-3 px-3 text-right font-black text-rose-600 dark:text-rose-400">{currency} {m.amount.toFixed(2)}</td>
+                        <td className="py-3 px-3 text-center">
+                          <button onClick={() => setViewingReceipt(m.receiptUrl!)} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-indigo-500/20 transition">
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ----------------------------------------------------
           ADMIN GUIDE - PLAIN ENGLISH FEATURE EXPLANATIONS
           ---------------------------------------------------- */}
       {adminTab === "admin-guide" && (
@@ -5685,6 +5835,20 @@ export default function AdminDashboard({
               <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Global Settings</h3>
               <p className="text-xs text-gray-600 dark:text-zinc-300 leading-relaxed">Change the shop name, logo, address, phone number, and currency. Update staff names and passwords. Wipe all data if you need to start fresh. These settings affect the entire system for all users.</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {viewingReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setViewingReceipt("")}>
+          <div className="max-w-3xl max-h-[90vh] overflow-auto rounded-2xl border border-white/10 bg-white p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-black text-gray-900 uppercase tracking-tight">Receipt Evidence</h3>
+              <button onClick={() => setViewingReceipt("")} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <img src={viewingReceipt} alt="Receipt" className="max-w-full max-h-[70vh] object-contain rounded-xl" />
           </div>
         </div>
       )}

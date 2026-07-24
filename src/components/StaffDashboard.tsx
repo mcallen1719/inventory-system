@@ -2242,6 +2242,20 @@ export default function StaffDashboard({
   const [miscDesc, setMiscDesc] = useState("");
   const [miscPurpose, setMiscPurpose] = useState("Office Supplies");
   const [miscAmount, setMiscAmount] = useState(0);
+  const [miscReceiptFile, setMiscReceiptFile] = useState<string>("");
+  const miscReceiptRef = React.useRef<HTMLInputElement>(null);
+
+  const handleMiscReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      alert("Receipt file must be under 2MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setMiscReceiptFile(reader.result as string);
+    reader.readAsDataURL(file);
+  };
 
   const handleSaveMisc = () => {
     if (!miscItem.trim() || miscAmount <= 0) {
@@ -2257,7 +2271,8 @@ export default function StaffDashboard({
       description: miscDesc,
       purpose: miscPurpose,
       amount: miscAmount,
-      staffName: activeUserName
+      staffName: activeUserName,
+      receiptUrl: miscReceiptFile || undefined
     });
 
     // Save audit log for minor expenditures tracking
@@ -2271,6 +2286,8 @@ export default function StaffDashboard({
     setMiscItem("");
     setMiscDesc("");
     setMiscAmount(0);
+    setMiscReceiptFile("");
+    if (miscReceiptRef.current) miscReceiptRef.current.value = "";
 
     onRefreshGlobalState();
     alert("Miscellaneous local expense logged successfully!");
@@ -3892,11 +3909,21 @@ export default function StaffDashboard({
               {/* Receipt Upload */}
               <div>
                 <label className="block font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1.5">Receipt Upload (Optional)</label>
-                <div className="border border-dashed border-white/10 rounded-2xl bg-white/5 p-4 text-center cursor-pointer hover:bg-white/10 hover:border-white/20 transition-all duration-200">
-                  <UploadCloud className="h-6 w-6 mx-auto text-gray-400 mb-1" />
-                  <span className="text-[10px] text-gray-700 dark:text-zinc-300 font-black uppercase tracking-widest block">Click or Drag invoice image</span>
-                  <span className="text-[8px] text-gray-400 font-bold uppercase tracking-widest block mt-0.5">JPG, PNG, PDF (Max 2MB)</span>
-                </div>
+                <input ref={miscReceiptRef} type="file" accept="image/*" onChange={handleMiscReceiptChange} className="hidden" />
+                {miscReceiptFile ? (
+                  <div className="relative rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                    <img src={miscReceiptFile} alt="Receipt preview" className="w-full max-h-40 object-contain rounded-xl" />
+                    <button onClick={() => { setMiscReceiptFile(""); if (miscReceiptRef.current) miscReceiptRef.current.value = ""; }} className="absolute top-2 right-2 p-1 rounded-lg bg-rose-500 text-white hover:bg-rose-600 cursor-pointer">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div onClick={() => miscReceiptRef.current?.click()} className="border border-dashed border-white/10 rounded-2xl bg-white/5 p-4 text-center cursor-pointer hover:bg-white/10 hover:border-white/20 transition-all duration-200">
+                    <UploadCloud className="h-6 w-6 mx-auto text-gray-400 mb-1" />
+                    <span className="text-[10px] text-gray-700 dark:text-zinc-300 font-black uppercase tracking-widest block">Click or Drag invoice image</span>
+                    <span className="text-[8px] text-gray-400 font-bold uppercase tracking-widest block mt-0.5">JPG, PNG, PDF (Max 2MB)</span>
+                  </div>
+                )}
               </div>
 
               <button onClick={handleSaveMisc} className="w-full rounded-xl bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-rose-500/15 cursor-pointer active:scale-95 transition-all duration-200">
