@@ -48,9 +48,103 @@ import {
   Cell
 } from "recharts";
 import { DBStore } from "../dbStore";
-import { CompanySettings, Expenditure, InventoryItem, UserRole, StaffAccount, StaffNote } from "../types";
+import { CompanySettings, Expenditure, InventoryItem, UserRole, StaffAccount, StaffNote, ReportedActivity } from "../types";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+
+interface DeleteWorkTableProps {
+  currency: string;
+  onRefresh: () => void;
+}
+
+function DeleteWorkTable({ currency, onRefresh }: DeleteWorkTableProps) {
+  const activities = DBStore.getAdminDeletableActivities();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = (id: string, ref: string) => {
+    if (!window.confirm(`Permanently delete this entry?\n\nRef: ${ref}\n\nThis cannot be undone.`)) return;
+    setDeletingId(id);
+    setTimeout(() => {
+      DBStore.deleteReportedActivity(id, "Admin");
+      setDeletingId(null);
+      onRefresh();
+      alert("Entry deleted successfully.");
+    }, 300);
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 dark:bg-zinc-900/30 backdrop-blur-md overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs">
+          <thead>
+            <tr className="border-b border-white/10 bg-white/5">
+              <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Type</th>
+              <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Ref</th>
+              <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Customer</th>
+              <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Staff</th>
+              <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider text-right">Amount</th>
+              <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Created</th>
+              <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Status</th>
+              <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {activities.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 dark:text-zinc-500">
+                  No staff activities recorded in the last 24 hours.
+                </td>
+              </tr>
+            ) : activities.map(a => {
+              const created = new Date(a.timestamp);
+              const now = new Date();
+              const diffMs = now.getTime() - created.getTime();
+              const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+              const remaining = 24 - diffHrs;
+              const isUrgent = remaining <= 2;
+              return (
+                <tr key={a.id} className={`hover:bg-white/5 transition ${a.isLocked ? "opacity-40" : ""}`}>
+                  <td className="px-4 py-3 font-bold text-gray-700 dark:text-zinc-300">{a.type}</td>
+                  <td className="px-4 py-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">{a.ref}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-zinc-400">{a.customer}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-zinc-400">{a.staffName}</td>
+                  <td className="px-4 py-3 text-right font-black text-gray-900 dark:text-white">{currency} {(a.amount || 0).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-gray-500 dark:text-zinc-500">{a.timestamp ? new Date(a.timestamp).toLocaleString() : "—"}</td>
+                  <td className="px-4 py-3">
+                    {a.isLocked ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-gray-500/10 text-gray-500 px-2 py-1 rounded-full">
+                        Locked
+                      </span>
+                    ) : a.isReported ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-rose-500/10 text-rose-600 px-2 py-1 rounded-full">
+                        Reported
+                      </span>
+                    ) : (
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ${isUrgent ? "bg-amber-500/10 text-amber-600" : "bg-emerald-500/10 text-emerald-600"}`}>
+                        {remaining}h left
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {!a.isLocked && (
+                      <button
+                        onClick={() => handleDelete(a.id, a.ref)}
+                        disabled={deletingId === a.id}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider transition disabled:opacity-50 cursor-pointer"
+                      >
+                        {deletingId === a.id ? "Deleting..." : "Delete"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 interface AdminDashboardProps {
   settings: CompanySettings;
@@ -5453,93 +5547,7 @@ export default function AdminDashboard({
             </div>
           </div>
 
-          {(() => {
-            const activities = DBStore.getAdminDeletableActivities();
-            const [deletingId, setDeletingId] = React.useState<string | null>(null);
-            const handleDelete = (id: string, ref: string) => {
-              if (!window.confirm(`Permanently delete this entry?\n\nRef: ${ref}\n\nThis cannot be undone.`)) return;
-              setDeletingId(id);
-              setTimeout(() => {
-                DBStore.deleteReportedActivity(id, "Admin");
-                setDeletingId(null);
-                onRefreshGlobalState();
-                alert("Entry deleted successfully.");
-              }, 300);
-            };
-            return (
-              <div className="rounded-2xl border border-white/10 bg-white/5 dark:bg-zinc-900/30 backdrop-blur-md overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-white/10 bg-white/5">
-                        <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Type</th>
-                        <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Ref</th>
-                        <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Customer</th>
-                        <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Staff</th>
-                        <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider text-right">Amount</th>
-                        <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Created</th>
-                        <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Status</th>
-                        <th className="px-4 py-3 font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider text-center">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {activities.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="px-4 py-8 text-center text-gray-400 dark:text-zinc-500">
-                            No staff activities recorded in the last 24 hours.
-                          </td>
-                        </tr>
-                      ) : activities.map(a => {
-                        const created = new Date(a.timestamp);
-                        const now = new Date();
-                        const diffMs = now.getTime() - created.getTime();
-                        const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-                        const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-                        const remaining = 24 - diffHrs;
-                        const isUrgent = remaining <= 2;
-                        return (
-                          <tr key={a.id} className={`hover:bg-white/5 transition ${a.isLocked ? "opacity-40" : ""}`}>
-                            <td className="px-4 py-3 font-bold text-gray-700 dark:text-zinc-300">{a.type}</td>
-                            <td className="px-4 py-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">{a.ref}</td>
-                            <td className="px-4 py-3 text-gray-600 dark:text-zinc-400">{a.customer}</td>
-                            <td className="px-4 py-3 text-gray-600 dark:text-zinc-400">{a.staffName}</td>
-                            <td className="px-4 py-3 text-right font-black text-gray-900 dark:text-white">{currency} {(a.amount || 0).toFixed(2)}</td>
-                            <td className="px-4 py-3 text-gray-500 dark:text-zinc-500">{a.timestamp ? new Date(a.timestamp).toLocaleString() : "—"}</td>
-                            <td className="px-4 py-3">
-                              {a.isLocked ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-gray-500/10 text-gray-500 px-2 py-1 rounded-full">
-                                  Locked
-                                </span>
-                              ) : a.isReported ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-rose-500/10 text-rose-600 px-2 py-1 rounded-full">
-                                  Reported
-                                </span>
-                              ) : (
-                                <span className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ${isUrgent ? "bg-amber-500/10 text-amber-600" : "bg-emerald-500/10 text-emerald-600"}`}>
-                                  {remaining}h left
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              {!a.isLocked && (
-                                <button
-                                  onClick={() => handleDelete(a.id, a.ref)}
-                                  disabled={deletingId === a.id}
-                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider transition disabled:opacity-50 cursor-pointer"
-                                >
-                                  {deletingId === a.id ? "Deleting..." : "Delete"}
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            );
-          })()}
+          <DeleteWorkTable currency={currency} onRefresh={onRefreshGlobalState} />
         </div>
       )}
 
