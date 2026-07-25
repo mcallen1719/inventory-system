@@ -402,12 +402,38 @@ export default function App() {
         </header>
 
         <main className="flex-1 px-4 py-6 md:px-8 md:py-8 max-w-7xl w-full mx-auto relative z-10">
-          <AnimatePresence mode="wait">
-             {isAdmin ? (
-               <motion.div key="admin" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.2 }}>
-                  <AdminInvoices settings={settings} onRefresh={handleRefresh} onOpenDocument={(type, data) => setActiveDocument({ type, data })} />
-               </motion.div>
-             ) : (
+           <AnimatePresence mode="wait">
+              {isAdmin ? (
+                activeTabId === "admin-invoices" ? (
+                  <motion.div key="admin-invoices" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.2 }}>
+                    <AdminInvoices settings={settings} onRefresh={handleRefresh} onOpenDocument={(type, data) => setActiveDocument({ type, data })} />
+                  </motion.div>
+                ) : (
+                  <motion.div key="admin" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.2 }}>
+                    <div className="space-y-6 p-6">
+                      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-gray-800 via-gray-900 to-slate-950 p-8 md:p-10 shadow-xl">
+                        <div className="absolute -top-10 -right-10 h-48 w-48 rounded-full bg-white/5 blur-2xl" />
+                        <div className="relative flex flex-col md:flex-row md:items-center gap-5">
+                          <div className="h-16 w-16 shrink-0 rounded-2xl bg-white/10 flex items-center justify-center shadow-lg backdrop-blur-sm">
+                            <BookOpen className="h-9 w-9 text-white" />
+                          </div>
+                          <div className="space-y-2">
+                            <span className="inline-block text-[10px] font-black uppercase tracking-widest bg-white/10 text-white px-2.5 py-0.5 rounded-full">
+                              Admin Section
+                            </span>
+                            <h2 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">
+                              {activeTabId.replace(/-/g, " ")}
+                            </h2>
+                            <p className="text-xs md:text-sm text-slate-300 font-medium max-w-3xl leading-relaxed">
+                              This section is part of the Admin area. The Admin Invoices module is available under the Admin Invoices tab.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )
+              ) : (
               <motion.div key="staff" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.2 }}>
                 <ErrorBoundary>
                   <StaffDashboard settings={settings} onOpenDocument={(type, data) => setActiveDocument({ type, data })} onRefreshGlobalState={handleRefresh} activeUserName={currentUser?.name} activeTab={activeTabId} setActiveTab={setActiveTabId} refreshTrigger={refreshTrigger} />
