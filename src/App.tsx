@@ -38,6 +38,7 @@ import {
 import LoginScreen from "./components/LoginScreen";
 import StaffDashboard from "./components/StaffDashboard";
 import AdminInvoices from "./components/AdminInvoices";
+import AdminDashboard from "./components/AdminDashboard";
 import DocumentViewer from "./components/DocumentViewer";
 import LegalModal from "./components/LegalModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
