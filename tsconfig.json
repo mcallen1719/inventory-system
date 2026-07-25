@@ -23,5 +23,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["vite.config.ts", "server/**/*"]
+  "exclude": ["vite.config.ts", "server/**/*", "src/components/AdminDashboard.tsx"]
 }

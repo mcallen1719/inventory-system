@@ -10,11 +10,13 @@ import logoUrl from "../assets/images/printopia_logo_1783376948226.jpg";
 import logoDataUri from "../assets/images/logoDataUri";
 
 interface DocumentViewerProps {
-  type: "invoice" | "receipt" | "waybill" | "delivery_receipt";
-  data: any; // Can be a Job or GeneralPrintingOrder
+  type: "invoice" | "receipt" | "waybill" | "delivery_receipt" | "admin_invoice";
+  data: any; // Can be a Job, GeneralPrintingOrder, or AdminInvoice
   settings: CompanySettings;
   onClose: () => void;
   onAddAuditLog: (action: string, module: string, details: string) => void;
+  onSave?: (updatedData: any) => void;
+  isAdmin?: boolean;
 }
 
 export default function DocumentViewer({
@@ -22,7 +24,9 @@ export default function DocumentViewer({
   data,
   settings,
   onClose,
-  onAddAuditLog
+  onAddAuditLog,
+  onSave,
+  isAdmin = false
 }: DocumentViewerProps) {
   const printRef = React.useRef<HTMLDivElement>(null);
 
@@ -598,6 +602,30 @@ export default function DocumentViewer({
                   <div className="max-w-md text-center sm:text-left">
                     <p className="text-xs font-medium text-gray-500 italic">
                       {settings.invoiceFooter}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeFormat === "admin_invoice" && (
+            <div className="space-y-6">
+              <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-indigo-800 via-indigo-900 to-slate-950 p-8 md:p-10 shadow-xl">
+                <div className="absolute -top-10 -right-10 h-48 w-48 rounded-full bg-white/5 blur-2xl" />
+                <div className="relative flex flex-col md:flex-row md:items-center gap-5">
+                  <div className="h-16 w-16 shrink-0 rounded-2xl bg-white/10 flex items-center justify-center shadow-lg backdrop-blur-sm">
+                    <FileText className="h-9 w-9 text-white" />
+                  </div>
+                  <div className="space-y-2">
+                    <span className="inline-block text-[10px] font-black uppercase tracking-widest bg-white/10 text-white px-2.5 py-0.5 rounded-full">
+                      Admin Invoice
+                    </span>
+                    <h2 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">
+                      Document Preview
+                    </h2>
+                    <p className="text-xs md:text-sm text-slate-300 font-medium max-w-3xl leading-relaxed">
+                      Use the Admin Invoices section to create or edit invoices. This viewer shows the selected invoice details.
                     </p>
                   </div>
                 </div>

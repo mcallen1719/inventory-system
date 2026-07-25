@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 import LoginScreen from "./components/LoginScreen";
 import StaffDashboard from "./components/StaffDashboard";
-import AdminDashboard from "./components/AdminDashboard";
+import AdminInvoices from "./components/AdminInvoices";
 import DocumentViewer from "./components/DocumentViewer";
 import LegalModal from "./components/LegalModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -64,7 +64,7 @@ export default function App() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [activeDocument, setActiveDocument] = useState<{ type: "invoice" | "receipt" | "waybill" | "delivery_receipt"; data: any } | null>(null);
+  const [activeDocument, setActiveDocument] = useState<{ type: "invoice" | "receipt" | "waybill" | "delivery_receipt" | "admin_invoice"; data: any } | null>(null);
   const [liveActivities, setLiveActivities] = useState<any[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isSupabaseReady, setIsSupabaseReady] = useState(false);
@@ -76,7 +76,7 @@ export default function App() {
     const saved = localStorage.getItem("lastActiveTabId");
     const target = hash || saved || "overview";
     
-    const adminTabs = ["overview", "inventory", "sales-reports", "statistics", "expenditures", "eod", "audit", "staff-activity", "security", "late-notes", "settings", "admin-guide", "delete-work"];
+    const adminTabs = ["overview", "inventory", "sales-reports", "statistics", "expenditures", "eod", "audit", "staff-activity", "security", "late-notes", "settings", "admin-guide", "delete-work", "receipts", "admin-invoices"];
     const staffTabs = ["overview", "gen-print", "job-intake", "kanban", "inventory", "misc", "shift-report", "learning"];
     
     if (role === UserRole.ADMIN) {
@@ -226,6 +226,7 @@ export default function App() {
     ? [
         { id: "overview", label: "Analytics Overview", icon: TrendingUp },
         { id: "inventory", label: "SKU Inventory", icon: Boxes },
+        { id: "admin-invoices", label: "Admin Invoices", icon: FileText },
         { id: "sales-reports", label: "Monthly Reports", icon: FileText },
         { id: "statistics", label: "Statistics", icon: TrendingUp },
         { id: "expenditures", label: "Expenditures", icon: CircleDollarSign },
@@ -402,11 +403,11 @@ export default function App() {
 
         <main className="flex-1 px-4 py-6 md:px-8 md:py-8 max-w-7xl w-full mx-auto relative z-10">
           <AnimatePresence mode="wait">
-            {isAdmin ? (
-              <motion.div key="admin" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.2 }}>
-                <AdminDashboard settings={settings} onUpdateSettings={(updated) => { DBStore.updateSettings(updated); handleRefresh(); }} onRefreshGlobalState={handleRefresh} onOpenDocument={(type, data) => setActiveDocument({ type, data })} activeTab={activeTabId} setActiveTab={setActiveTabId} refreshTrigger={refreshTrigger} />
-              </motion.div>
-            ) : (
+             {isAdmin ? (
+               <motion.div key="admin" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.2 }}>
+                  <AdminInvoices settings={settings} onRefresh={handleRefresh} onOpenDocument={(type, data) => setActiveDocument({ type, data })} />
+               </motion.div>
+             ) : (
               <motion.div key="staff" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.2 }}>
                 <ErrorBoundary>
                   <StaffDashboard settings={settings} onOpenDocument={(type, data) => setActiveDocument({ type, data })} onRefreshGlobalState={handleRefresh} activeUserName={currentUser?.name} activeTab={activeTabId} setActiveTab={setActiveTabId} refreshTrigger={refreshTrigger} />
@@ -432,7 +433,7 @@ export default function App() {
       </div>
 
       {activeDocument && (
-        <DocumentViewer type={activeDocument.type} data={activeDocument.data} settings={settings} onClose={() => setActiveDocument(null)} onAddAuditLog={(action, module, details) => { DBStore.addAuditLog(currentUser.name, action, module, details); handleRefresh(); }} />
+        <DocumentViewer type={activeDocument.type} data={activeDocument.data} settings={settings} onClose={() => setActiveDocument(null)} onAddAuditLog={(action, module, details) => { DBStore.addAuditLog(currentUser.name, action, module, details); handleRefresh(); }} onSave={(updatedData) => { if (activeDocument.type === "admin_invoice") { DBStore.updateAdminInvoice(updatedData); handleRefresh(); setActiveDocument(null); } }} isAdmin={activeDocument.type === "admin_invoice"} />
       )}
 
       <LegalModal isOpen={isLegalOpen} onClose={() => setIsLegalOpen(false)} defaultTab={legalTab} />

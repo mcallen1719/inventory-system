@@ -1990,18 +1990,32 @@ export default function StaffDashboard({
 
 
   // ----------------------------------------------------
-  // STATE FOR RECORDING INCREMENTAL PAYMENTS & HISTORY
+  // STATE FOR EDITING JOB DESCRIPTION
   // ----------------------------------------------------
-  const [selectedPaymentJob, setSelectedPaymentJob] = useState<Job | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState<string>("");
-  const [paymentMethod, setPaymentMethod] = useState<"Mobile Money" | "Cash" | "Bank Transfer" | "POS">("Cash");
-  const [paymentStaff, setPaymentStaff] = useState<string>("");
-  const [paymentError, setPaymentError] = useState<string>("");
-  const [paymentSuccess, setPaymentSuccess] = useState<string>("");
-  const [paymentDate, setPaymentDate] = useState<string>("");
-  const [paymentTime, setPaymentTime] = useState<string>("");
+  const [editingJobDescription, setEditingJobDescription] = useState<string | null>(null);
+  const [editDescriptionText, setEditDescriptionText] = useState("");
 
-  // Set default receiving staff when payment modal opens
+  const handleOpenEditDescription = (job: Job) => {
+    setEditingJobDescription(job.id);
+    setEditDescriptionText(job.jobDescription);
+  };
+
+  const handleSaveDescription = () => {
+    if (!editingJobDescription) return;
+    const job = DBStore.getJobs().find(j => j.id === editingJobDescription);
+    if (!job) return;
+    const updated = { ...job, jobDescription: editDescriptionText };
+    DBStore.updateJob(updated);
+    setEditingJobDescription(null);
+    setEditDescriptionText("");
+    onRefreshGlobalState();
+  };
+
+  const handleCloseDescriptionModal = () => {
+    setEditingJobDescription(null);
+    setEditDescriptionText("");
+  };
+
   React.useEffect(() => {
     if (selectedPaymentJob) {
       setPaymentStaff(activeUserName || selectedPaymentJob.assignedStaff || "Staff");
@@ -3754,9 +3768,18 @@ export default function StaffDashboard({
                               <p className="text-xs font-black text-gray-950 dark:text-white truncate" title={job.customerName}>
                                 {job.customerName}
                               </p>
-                              <p className="text-[11px] text-gray-500 dark:text-zinc-400 line-clamp-2 leading-relaxed font-semibold">
-                                {job.jobDescription}
-                              </p>
+                              <div className="flex items-start gap-2">
+                                <p className="text-[11px] text-gray-500 dark:text-zinc-400 leading-relaxed font-semibold flex-1">
+                                  {job.jobDescription}
+                                </p>
+                                <button
+                                  onClick={() => handleOpenEditDescription(job)}
+                                  title="Edit Job Description"
+                                  className="p-1 rounded-lg hover:bg-indigo-500/10 text-indigo-600 cursor-pointer transition-colors duration-200 shrink-0"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                              </div>
 
                               <div className="text-[10px] text-gray-400 space-y-0.5 font-bold uppercase tracking-wide">
                                 <div><span className="text-gray-500">Deadline:</span> <span className={`font-black ${isOverdue ? 'text-red-600 dark:text-red-400' : isUrgent ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`}>{job.expectedDeliveryDate}</span></div>
@@ -5268,6 +5291,65 @@ export default function StaffDashboard({
                   className="rounded-xl border border-white/10 dark:border-zinc-800 bg-white/40 dark:bg-zinc-900/40 hover:bg-white/60 dark:hover:bg-zinc-800 text-gray-800 dark:text-zinc-200 font-black py-3 text-xs active:scale-95 cursor-pointer transition-all uppercase tracking-widest"
                 >
                   No, Thanks
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ----------------------------------------------------
+          EDIT JOB DESCRIPTION MODAL
+          ---------------------------------------------------- */}
+      {editingJobDescription && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl relative overflow-hidden">
+            <div className="cmyk-bar absolute top-0 left-0 right-0 h-[4px]" />
+
+            <div className="p-6 md:p-8 space-y-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <h3 className="text-base font-black text-gray-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                    <Pencil className="h-4.5 w-4.5 text-indigo-600 dark:text-indigo-400" />
+                    Edit Job Description
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
+                    Update the detailed job description. This will be visible on the production card and on all printed documents.
+                  </p>
+                </div>
+                <button
+                  onClick={handleCloseDescriptionModal}
+                  className="p-1 rounded-xl hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-400 hover:text-gray-750 dark:hover:text-white cursor-pointer transition"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Detailed Job Description</label>
+                  <textarea
+                    value={editDescriptionText}
+                    onChange={(e) => setEditDescriptionText(e.target.value)}
+                    rows={6}
+                    className="w-full glass-input rounded-xl px-3.5 py-2.5 text-xs text-gray-900 dark:text-white font-medium"
+                    placeholder="Enter detailed job description..."
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={handleCloseDescriptionModal}
+                  className="w-full inline-flex items-center justify-center rounded-xl border border-white/10 dark:border-zinc-800 bg-white/40 dark:bg-zinc-900/40 hover:bg-white/60 dark:hover:bg-zinc-800 text-gray-800 dark:text-zinc-200 font-black py-3 text-xs active:scale-95 cursor-pointer transition-all uppercase tracking-widest"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveDescription}
+                  className="w-full inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black py-3 text-xs shadow-lg active:scale-95 cursor-pointer transition-all uppercase tracking-widest"
+                >
+                  Save Changes
                 </button>
               </div>
             </div>

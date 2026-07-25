@@ -341,15 +341,37 @@ export interface StaffNote {
   sessionType?: "Clock In" | "Clock Out" | "Late Arrival";
 }
 
-export interface ReportedActivity {
+export interface AdminInvoice {
   id: string;
-  activityType: "job" | "gpo" | "sales_report" | "misc";
-  activityId: string;
-  activityRef: string;
-  staffName: string;
-  reportedAt: string;
-  reason?: string;
-  createdAt: string;
+  invoiceNumber: string;
+  customerName: string;
+  customerPhone: string;
+  companyName: string;
+  representativeName: string;
+  date: string;
+  items: Array<{
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    total: number;
+  }>;
+  subtotal: number;
+  tax: number;
+  discount: number;
+  grandTotal: number;
+  amountPaid: number;
+  balance: number;
+  paymentMethod: "Mobile Money" | "Cash" | "Bank Transfer" | "POS";
+  paymentDetails: {
+    type: "mobile_money" | "bank" | "";
+    momoName?: string;
+    momoNumber?: string;
+    accountNumber?: string;
+    bankName?: string;
+  };
+  notes?: string;
+  status: "draft" | "confirmed";
+  createdBy: string;
 }
 
 export interface ReportedActivity {

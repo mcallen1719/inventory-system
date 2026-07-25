@@ -18,7 +18,8 @@ import {
   StaffAccount,
   StaffNote,
   DeletedJob,
-  ReportedActivity
+  ReportedActivity,
+  AdminInvoice
 } from "./types";
 import { supabase, isSupabaseEnabled } from "./supabaseClient";
 import { io } from "socket.io-client";
@@ -44,7 +45,8 @@ const SOCKET_KEYS = [
   "printing_db_staff_attendance",
   "printing_db_deleted_jobs",
   "printing_db_live_activity",
-  "printing_db_reported_activities"
+  "printing_db_reported_activities",
+  "printing_db_admin_invoices"
 ];
 
 function getSyncServerUrl(): string {
@@ -221,7 +223,8 @@ const KEYS = {
   STAFF_ATTENDANCE: "printing_db_staff_attendance",
   DELETED_JOBS: "printing_db_deleted_jobs",
   LIVE_ACTIVITY: "printing_db_live_activity",
-  REPORTED_ACTIVITIES: "printing_db_reported_activities"
+  REPORTED_ACTIVITIES: "printing_db_reported_activities",
+  ADMIN_INVOICES: "printing_db_admin_invoices"
 };
 
 // Auto-clear demo mockup data on first load of this production release
@@ -243,6 +246,7 @@ if (typeof window !== "undefined" && !localStorage.getItem(CLEAR_DEMO_FLAG) && !
   localStorage.removeItem(KEYS.STAFF_ATTENDANCE);
   localStorage.removeItem(KEYS.DELETED_JOBS);
   localStorage.removeItem(KEYS.REPORTED_ACTIVITIES);
+  localStorage.removeItem(KEYS.ADMIN_INVOICES);
 }
 
 // Default Staff Accounts
@@ -255,7 +259,7 @@ const DEFAULT_STAFF_ACCOUNTS: StaffAccount[] = [
 const DEFAULT_SETTINGS: CompanySettings = {
   companyName: "Printopia Digital Press",
   logoUrl: "/src/assets/images/printopia_logo_1783376948226.jpg",
-  address: "Accra-Teshie Bushroad, Teshie, Accra, Ghana",
+  address: "Accra Bushroad, Accra, Ghana",
   phone: "0209905927",
   email: "printopia85@gmail.com",
   vatRate: 0,
@@ -314,6 +318,7 @@ const SEED_SALES_REPORTS: DailySalesReport[] = [];
 const SEED_AUDIT: AuditLog[] = [];
 const SEED_NOTIFICATIONS: Notification[] = [];
 const SEED_STAFF_NOTES: StaffNote[] = [];
+const SEED_ADMIN_INVOICES: AdminInvoice[] = [];
 
 function getStored<T>(key: string, seed: T): T {
   const data = localStorage.getItem(key);
@@ -1098,6 +1103,45 @@ export const DBStore = {
       this.addNotification("job_deleted", `${activityType} ${activityId} was deleted by ${adminUser} from Delete Work queue.`);
     }
     return deleted;
+  },
+
+  getAdminInvoices(): AdminInvoice[] {
+    return getStored<AdminInvoice[]>(KEYS.ADMIN_INVOICES, SEED_ADMIN_INVOICES);
+  },
+
+  saveAdminInvoice(invoice: Omit<AdminInvoice, "id" | "invoiceNumber">): AdminInvoice {
+    const invoices = this.getAdminInvoices();
+    const nextNumber = invoices.length + 1;
+    const padding = String(nextNumber).padStart(4, "0");
+    const year = new Date().getFullYear();
+    const invoiceNumber = `AINV-${year}-${padding}`;
+    const id = `ainv-${Date.now()}`;
+    const newInvoice: AdminInvoice = { ...invoice, id, invoiceNumber };
+    invoices.unshift(newInvoice);
+    setStored(KEYS.ADMIN_INVOICES, invoices);
+    this.addAuditLog(invoice.createdBy, "Create", "Admin Invoices", `Created admin invoice ${invoiceNumber} for ${invoice.customerName} (${invoice.companyName}).`);
+    this.broadcastLiveActivity(invoice.createdBy, "Create", "Admin Invoices", `New admin invoice ${invoiceNumber} for ${invoice.customerName}`);
+    return newInvoice;
+  },
+
+  updateAdminInvoice(invoice: AdminInvoice) {
+    const invoices = this.getAdminInvoices();
+    const index = invoices.findIndex(i => i.id === invoice.id);
+    if (index !== -1) {
+      invoices[index] = invoice;
+      setStored(KEYS.ADMIN_INVOICES, invoices);
+      this.addAuditLog(invoice.createdBy, "Edit", "Admin Invoices", `Updated admin invoice ${invoice.invoiceNumber} for ${invoice.customerName}.`);
+    }
+  },
+
+  deleteAdminInvoice(id: string, user: string) {
+    const invoices = this.getAdminInvoices();
+    const invoice = invoices.find(i => i.id === id);
+    if (invoice) {
+      const filtered = invoices.filter(i => i.id !== id);
+      setStored(KEYS.ADMIN_INVOICES, filtered);
+      this.addAuditLog(user, "Delete", "Admin Invoices", `Deleted admin invoice ${invoice.invoiceNumber} for ${invoice.customerName}.`);
+    }
   }
 };
 
