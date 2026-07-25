@@ -2016,6 +2016,15 @@ export default function StaffDashboard({
     setEditDescriptionText("");
   };
 
+  const [selectedPaymentJob, setSelectedPaymentJob] = useState<Job | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<string>("");
+  const [paymentMethod, setPaymentMethod] = useState<"Mobile Money" | "Cash" | "Bank Transfer" | "POS">("Cash");
+  const [paymentStaff, setPaymentStaff] = useState<string>("");
+  const [paymentError, setPaymentError] = useState<string>("");
+  const [paymentSuccess, setPaymentSuccess] = useState<string>("");
+  const [paymentDate, setPaymentDate] = useState<string>("");
+  const [paymentTime, setPaymentTime] = useState<string>("");
+
   React.useEffect(() => {
     if (selectedPaymentJob) {
       setPaymentStaff(activeUserName || selectedPaymentJob.assignedStaff || "Staff");
@@ -5310,7 +5319,7 @@ export default function StaffDashboard({
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
                   <h3 className="text-base font-black text-gray-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
-                    <Pencil className="h-4.5 w-4.5 text-indigo-600 dark:text-indigo-400" />
+                     <Pencil className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                     Edit Job Description
                   </h3>
                   <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
