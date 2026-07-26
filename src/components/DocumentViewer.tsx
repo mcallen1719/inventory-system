@@ -50,6 +50,9 @@ export default function DocumentViewer({
 
   // Auto generated document identifiers
   const documentNumber = React.useMemo(() => {
+    if (activeFormat === "admin_invoice" && data.invoiceNumber) {
+      return data.invoiceNumber;
+    }
     const year = new Date().getFullYear();
     const rand = Math.floor(1000 + Math.random() * 9000);
     const suffix = data.jobNumber 
@@ -63,15 +66,13 @@ export default function DocumentViewer({
     } else if (activeFormat === "delivery_receipt") {
       return `DLV-${suffix}`;
     } else {
-      return `WAY-${suffix}`;
+      return `WAY-${rand}`;
     }
-  }, [activeFormat, data.jobNumber, data.orderNumber]);
+  }, [activeFormat, data.jobNumber, data.orderNumber, data.invoiceNumber]);
 
   // Extract items for display
   const itemsList = React.useMemo(() => {
     if (data.jobDescription) {
-      // It's a Job
-      // Let's back-calculate subtotal for the line item description so that tax + subtotal sum up to the total contract amount
       const rate = settings.vatRate || 0;
       const sub = data.totalAmount / (1 + rate / 100);
       return [
@@ -82,8 +83,9 @@ export default function DocumentViewer({
           total: sub
         }
       ];
+    } else if (Array.isArray(data.items) && data.items.length > 0) {
+      return data.items;
     } else {
-      // It's a GeneralPrintingOrder
       const list: Array<{ description: string; quantity: number; unitPrice: number; total: number }> = [];
       if (data.photocopy?.quantity > 0) {
         const lines = Array.isArray(data.photocopy.lines) ? data.photocopy.lines : null;
@@ -203,7 +205,7 @@ export default function DocumentViewer({
   }, [isJob, data.totalAmount, subtotal, data.tax, settings.vatRate]);
 
   const grandTotal = isJob ? data.totalAmount : (data.grandTotal || (subtotal - discount + vat));
-  const depositPaid = data.depositPaid !== undefined ? data.depositPaid : grandTotal;
+  const depositPaid = data.depositPaid !== undefined ? data.depositPaid : (data.amountPaid !== undefined ? data.amountPaid : grandTotal);
   const balance = data.balance !== undefined ? data.balance : (grandTotal - depositPaid);
   const paymentMethod = data.paymentMethod || "Cash";
 
@@ -610,22 +612,158 @@ export default function DocumentViewer({
           )}
 
           {activeFormat === "admin_invoice" && (
-            <div className="space-y-6">
-              <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-indigo-800 via-indigo-900 to-slate-950 p-8 md:p-10 shadow-xl">
-                <div className="absolute -top-10 -right-10 h-48 w-48 rounded-full bg-white/5 blur-2xl" />
-                <div className="relative flex flex-col md:flex-row md:items-center gap-5">
-                  <div className="h-16 w-16 shrink-0 rounded-2xl bg-white/10 flex items-center justify-center shadow-lg backdrop-blur-sm">
-                    <FileText className="h-9 w-9 text-white" />
+            <div className="space-y-6 relative min-h-[550px]">
+              {/* Background watermark */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0" style={{ opacity: 0.20 }}>
+                <img
+                  src={resolveLogo()}
+                  alt="Watermark"
+                  className="w-4/5 max-w-sm object-contain"
+                  style={{ filter: "grayscale(100%) contrast(120%)" }}
+                />
+              </div>
+
+              <div className="relative z-10 space-y-6">
+                {/* Invoice Layout */}
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <img
+                        src={resolveLogo()}
+                        alt="Printopia Logo"
+                        className="h-10 w-auto object-contain"
+                      />
+                      <span className="text-xl font-bold tracking-tight text-gray-900">
+                        {settings.companyName}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 max-w-sm whitespace-pre-line">
+                      {settings.address}
+                    </p>
+                    <p className="text-xs text-gray-500">Phone: {settings.phone}</p>
+                    <p className="text-xs text-gray-500">Email: {settings.email}</p>
                   </div>
-                  <div className="space-y-2">
-                    <span className="inline-block text-[10px] font-black uppercase tracking-widest bg-white/10 text-white px-2.5 py-0.5 rounded-full">
-                      Admin Invoice
+                  <div className="text-left sm:text-right">
+                    <h1 className="text-2xl font-black text-indigo-600 uppercase tracking-wider mb-1">
+                      ADMIN INVOICE
+                    </h1>
+                    <p className="text-sm font-semibold text-gray-800">{documentNumber}</p>
+                    <p className="text-xs text-gray-500">Date: {dateStr}</p>
+                  </div>
+                </div>
+
+                <hr className="border-gray-100" />
+
+                {/* Bill To */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">
+                      Bill To
+                    </h3>
+                    <p className="text-sm font-bold text-gray-800">{customerName}</p>
+                    <p className="text-xs text-gray-500">Phone: {customerPhone}</p>
+                    {(data.companyName || data.representativeName) && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {(data.companyName ? `Company: ${data.companyName}` : "") + (data.companyName && data.representativeName ? " | " : "") + (data.representativeName ? `Rep: ${data.representativeName}` : "")}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">
+                      Payment Status
+                    </h3>
+                    <span
+                      className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                        balance <= 0
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          : depositPaid > 0
+                          ? "bg-amber-50 text-amber-700 border border-amber-200"
+                          : "bg-rose-50 text-rose-700 border border-rose-200"
+                      }`}
+                    >
+                      {balance <= 0 ? "FULLY PAID" : depositPaid > 0 ? "PARTIALLY PAID" : "UNPAID"}
                     </span>
-                    <h2 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">
-                      Document Preview
-                    </h2>
-                    <p className="text-xs md:text-sm text-slate-300 font-medium max-w-3xl leading-relaxed">
-                      Use the Admin Invoices section to create or edit invoices. This viewer shows the selected invoice details.
+                    <p className="text-xs text-gray-500 mt-1">Method: {paymentMethod}</p>
+                  </div>
+                </div>
+
+                {/* Line Items Table */}
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b-2 border-gray-100 text-gray-400 text-xs font-semibold uppercase tracking-wider">
+                      <th className="py-2.5">Item Description</th>
+                      <th className="py-2.5 text-right w-20">Qty</th>
+                      <th className="py-2.5 text-right w-28">Unit Price</th>
+                      <th className="py-2.5 text-right w-28">Total Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {itemsList.map((item, i) => (
+                      <tr key={i} className="text-gray-700">
+                        <td className="py-3 font-medium text-gray-900">{item.description}</td>
+                        <td className="py-3 text-right">{item.quantity}</td>
+                        <td className="py-3 text-right">
+                          {currency} {item.unitPrice.toFixed(2)}
+                        </td>
+                        <td className="py-3 text-right font-semibold">
+                          {currency} {item.total.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Subtotal, Tax, Grand Total */}
+                <div className="flex justify-end pt-4">
+                  <div className="w-64 space-y-2 text-sm text-gray-600">
+                    <div className="flex justify-between">
+                      <span>Subtotal</span>
+                      <span>
+                        {currency} {subtotal.toFixed(2)}
+                      </span>
+                    </div>
+                    {discount > 0 && (
+                      <div className="flex justify-between text-rose-600">
+                        <span>Discount</span>
+                        <span>
+                          - {currency} {discount.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    <hr className="border-gray-100" />
+                    <div className="flex justify-between font-black text-gray-900 text-base">
+                      <span>Grand Total</span>
+                      <span className="text-indigo-600">
+                        {currency} {grandTotal.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs text-emerald-600 font-semibold">
+                      <span>Paid</span>
+                      <span>
+                        {currency} {depositPaid.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs text-rose-600 font-bold">
+                      <span>Balance Due</span>
+                      <span>
+                        {currency} {balance.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {(data.notes && data.notes.trim()) && (
+                  <div className="border-t border-gray-100 pt-4">
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Notes</h3>
+                    <p className="text-xs text-gray-600 whitespace-pre-line">{data.notes}</p>
+                  </div>
+                )}
+
+                {/* Footer */}
+                <div className="border-t border-gray-100 pt-6 mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="max-w-md text-center sm:text-left">
+                    <p className="text-xs font-medium text-gray-500 italic">
+                      {settings.invoiceFooter}
                     </p>
                   </div>
                 </div>
