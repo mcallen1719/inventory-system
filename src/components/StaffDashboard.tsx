@@ -480,8 +480,23 @@ export default function StaffDashboard({
       });
     });
 
+    expenditures.forEach(e => {
+      txs.push({
+        id: e.id,
+        date: e.date,
+        timestamp: `${e.date} 12:00`,
+        ref: `Expense: ${e.item}`,
+        customer: `Supplier: ${e.supplier} (${e.category})`,
+        amount: e.amount,
+        paymentMethod: "Cash Outflow",
+        staff: "Admin",
+        type: "Admin Expenditure",
+        isExpense: true
+      });
+    });
+
     return txs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-  }, [orders, jobs, miscs]);
+  }, [orders, jobs, miscs, expenditures]);
 
   // Range and filter calculation for Ledger Navigation
   const ledgerRange = useMemo(() => {

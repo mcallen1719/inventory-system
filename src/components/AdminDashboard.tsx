@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -597,14 +597,15 @@ export default function AdminDashboard({
 
     // Daily revenue trend (across the month)
     const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-    const daily: { day: string; Revenue: number; Expenses: number }[] = [];
+    const daily: { day: string; Revenue: number; Expenses: number; Net: number }[] = [];
     for (let d = 1; d <= daysInMonth; d++) {
       const ds = `${currentMonth}-${String(d).padStart(2, "0")}`;
       const r = monthOrders.filter(o => o.date === ds).reduce((s, o) => s + o.grandTotal, 0)
         + monthJobs.filter(j => j.date === ds).reduce((s, j) => s + j.depositPaid, 0);
       const e = monthExps.filter(x => x.date === ds).reduce((s, x) => s + x.amount, 0)
         + monthMiscs.filter(m => m.date === ds).reduce((s, m) => s + m.amount, 0);
-      if (r > 0 || e > 0) daily.push({ day: String(d), Revenue: r, Expenses: e });
+      const net = r - e;
+      if (r > 0 || e > 0) daily.push({ day: String(d), Revenue: r, Expenses: e, Net: net });
     }
 
     // Jobs per day (line)
@@ -1488,6 +1489,56 @@ export default function AdminDashboard({
       },
       margin: { left: margin, right: margin }
     });
+
+    yPos = (doc as any).lastAutoTable.finalY + 8;
+
+    // Daily Net Performance Section
+    addSectionHeader("Daily Net Performance", [20, 80, 160]);
+    addNote("Day-by-day breakdown of sales, expenses, and the net amount remaining after expenses are deducted. This shows exactly how much was left each day.");
+
+    const daysInMonthForPdf = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    const dailyNetRows: string[][] = [];
+    for (let d = 1; d <= daysInMonthForPdf; d++) {
+      const ds = `${currentMonth}-${String(d).padStart(2, "0")}`;
+      const daySales = monthOrders.filter((o: any) => o.date === ds).reduce((s: number, o: any) => s + (o.grandTotal || 0), 0)
+        + monthJobs.filter((j: any) => j.date === ds).reduce((s: number, j: any) => s + (j.depositPaid || 0), 0);
+      const dayExpenses = expenditures.filter((e: any) => e.date === ds).reduce((s: number, e: any) => s + (e.amount || 0), 0)
+        + miscs.filter((m: any) => m.date === ds).reduce((s: number, m: any) => s + (m.amount || 0), 0);
+      const dayNet = daySales - dayExpenses;
+      if (daySales > 0 || dayExpenses > 0) {
+        const dateObj = new Date(ds);
+        const dayLabel = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        dailyNetRows.push([
+          dayLabel,
+          `${currency} ${daySales.toFixed(2)}`,
+          `${currency} ${dayExpenses.toFixed(2)}`,
+          `${currency} ${dayNet.toFixed(2)}`
+        ]);
+      }
+    }
+
+    if (dailyNetRows.length > 0) {
+      (autoTable as any)(doc, {
+        startY: yPos,
+        head: [["Day", "Sales", "Expenses", "Net After Expenses"]],
+        body: dailyNetRows,
+        theme: "grid",
+        headStyles: { fillColor: [20, 80, 160], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9 },
+        bodyStyles: { fontSize: 9 },
+        alternateRowStyles: { fillColor: [240, 248, 255] },
+        columnStyles: {
+          0: { cellWidth: 50 },
+          1: { cellWidth: 40, halign: "right" },
+          2: { cellWidth: 40, halign: "right" },
+          3: { cellWidth: 50, halign: "right", fontStyle: "bold" }
+        },
+        margin: { left: margin, right: margin }
+      });
+    } else {
+      doc.setFontSize(9);
+      doc.text("No sales or expenses recorded this month.", margin, yPos);
+      yPos += 6;
+    }
 
     yPos = (doc as any).lastAutoTable.finalY + 8;
 
