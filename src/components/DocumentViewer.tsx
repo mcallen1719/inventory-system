@@ -662,12 +662,15 @@ export default function DocumentViewer({
                     </h3>
                     <p className="text-sm font-bold text-gray-800">{customerName}</p>
                     <p className="text-xs text-gray-500">Phone: {customerPhone}</p>
-                    {(data.companyName || data.representativeName) && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        {(data.companyName ? `Company: ${data.companyName}` : "") + (data.companyName && data.representativeName ? " | " : "") + (data.representativeName ? `Rep: ${data.representativeName}` : "")}
-                      </p>
-                    )}
-                  </div>
+                     {(data.companyName || data.representativeName) && (
+                       <p className="text-xs text-gray-500 mt-1">
+                         {(data.companyName ? `Company: ${data.companyName}` : "") + (data.companyName && data.representativeName ? " | " : "") + (data.representativeName ? `Rep: ${data.representativeName}` : "")}
+                       </p>
+                     )}
+                     {data.description && (
+                       <p className="text-xs text-gray-500 mt-1">{data.description}</p>
+                     )}
+                   </div>
                   <div className="text-right">
                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">
                       Payment Status

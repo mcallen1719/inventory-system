@@ -348,6 +348,7 @@ export interface AdminInvoice {
   customerPhone: string;
   companyName: string;
   representativeName: string;
+  description: string;
   date: string;
   items: Array<{
     description: string;

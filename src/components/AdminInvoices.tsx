@@ -14,6 +14,7 @@ export default function AdminInvoices({ settings, onRefresh, onOpenDocument }: A
   const [customerPhone, setCustomerPhone] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [representativeName, setRepresentativeName] = useState("");
+  const [description, setDescription] = useState("");
   const [items, setItems] = useState<Array<{ description: string; quantity: number; unitPrice: number; total: number }>>([]);
   const [itemDesc, setItemDesc] = useState("");
   const [itemQty, setItemQty] = useState(1);
@@ -73,6 +74,7 @@ export default function AdminInvoices({ settings, onRefresh, onOpenDocument }: A
         customerPhone,
         companyName,
         representativeName,
+        description,
         date: existing.date,
         items,
         subtotal,
@@ -100,6 +102,7 @@ export default function AdminInvoices({ settings, onRefresh, onOpenDocument }: A
         customerPhone,
         companyName,
         representativeName,
+        description,
         date: todayStr,
         items,
         subtotal,
@@ -146,6 +149,7 @@ export default function AdminInvoices({ settings, onRefresh, onOpenDocument }: A
     setCustomerPhone(invoice.customerPhone);
     setCompanyName(invoice.companyName);
     setRepresentativeName(invoice.representativeName);
+    setDescription(invoice.description || "");
     setItems(invoice.items);
     setDiscount(invoice.discount);
     setPaymentMethod(invoice.paymentMethod);
@@ -172,6 +176,7 @@ export default function AdminInvoices({ settings, onRefresh, onOpenDocument }: A
     setCustomerPhone("");
     setCompanyName("");
     setRepresentativeName("");
+    setDescription("");
     setItems([]);
     setDiscount(0);
     setPaymentMethod("Mobile Money");
@@ -226,11 +231,15 @@ export default function AdminInvoices({ settings, onRefresh, onOpenDocument }: A
               <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Company name (optional)" className="mt-1 w-full rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-xs focus:border-indigo-400 focus:outline-none" />
             </div>
             <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider">Representative Name</label>
-              <input type="text" value={representativeName} onChange={(e) => setRepresentativeName(e.target.value)} placeholder="Rep name (optional)" className="mt-1 w-full rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-xs focus:border-indigo-400 focus:outline-none" />
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider">Item Description</label>
+               <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider">Representative Name</label>
+               <input type="text" value={representativeName} onChange={(e) => setRepresentativeName(e.target.value)} placeholder="Rep name (optional)" className="mt-1 w-full rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-xs focus:border-indigo-400 focus:outline-none" />
+             </div>
+             <div>
+               <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider">Description</label>
+               <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Invoice purpose or description" className="mt-1 w-full rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-xs focus:border-indigo-400 focus:outline-none" />
+             </div>
+             <div>
+               <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider">Item Description</label>
               <input type="text" value={itemDesc} onChange={(e) => setItemDesc(e.target.value)} placeholder="Service or product" className="mt-1 w-full rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-xs focus:border-indigo-400 focus:outline-none" />
             </div>
             <div className="grid grid-cols-2 gap-3">

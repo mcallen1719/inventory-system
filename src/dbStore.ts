@@ -102,21 +102,6 @@ function initSocketSync() {
       socketReady = false;
     });
 
-    socket.on("connect", () => {
-      console.log("[Sync] Socket connected:", socket?.id);
-      socketReady = true;
-    });
-
-    socket.on("disconnect", () => {
-      console.log("[Sync] Socket disconnected");
-      socketReady = false;
-    });
-
-    socket.on("connect_error", (err) => {
-      console.error("[Sync] Socket connection error:", err.message);
-      socketReady = false;
-    });
-
     socket.on("db_full_sync", (payload) => {
       console.log("[Sync] Full sync received, keys:", payload && Object.keys(payload).length);
       if (!payload || typeof payload !== "object") return;
@@ -124,48 +109,22 @@ function initSocketSync() {
       for (const key in payload) {
         if (key.startsWith("__v_")) continue;
         const data = payload[key];
-        if (data !== undefined && data !== null) {
-          localStorage.setItem(key, JSON.stringify(data));
-          updated = true;
+        if (data === undefined || data === null) continue;
+        const existing = localStorage.getItem(key);
+        if (Array.isArray(data) && data.length === 0 && existing) {
+          try {
+            const existingData = JSON.parse(existing);
+            if (Array.isArray(existingData) && existingData.length > 0) continue;
+          } catch { /* ignore */ }
         }
+        localStorage.setItem(key, JSON.stringify(data));
+        updated = true;
       }
       if (updated) {
         const event = new CustomEvent("printopia-sync", { detail: { key: "printing_db_init" } });
         window.dispatchEvent(event);
       }
-    });
-
-    socket.on("connect", () => {
-      console.log("Sync server connected:", url);
-      socketReady = true;
-    });
-
-    socket.on("disconnect", () => {
-      console.log("Sync server disconnected");
-      socketReady = false;
-    });
-
-    socket.on("connect_error", (err) => {
-      console.error("Sync server connection error:", err.message);
-      socketReady = false;
-    });
-
-    socket.on("db_full_sync", (payload: Record<string, any>) => {
-      if (!payload || typeof payload !== "object") return;
-      let updated = false;
-      for (const key in payload) {
-        if (key.startsWith("__v_")) continue;
-        const data = payload[key];
-        if (data !== undefined && data !== null) {
-          localStorage.setItem(key, JSON.stringify(data));
-          updated = true;
-        }
-      }
-      if (updated) {
-        const event = new CustomEvent("printopia-sync", { detail: { key: "printing_db_init" } });
-        window.dispatchEvent(event);
-      }
-    });
+     });
 
     socket.on("db_update", (payload: { key: string; data: any }) => {
       const { key, data } = payload;

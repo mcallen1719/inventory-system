@@ -2134,7 +2134,7 @@ export default function StaffDashboard({
   const [shRemarks, setShRemarks] = useState("");
 
   const shCalculations = useMemo(() => {
-    const totalSales = shPhoto + shPrint + shFrame + shShirt + shLarge + shDtf + shSpecial;
+    const totalSales = shPhoto + shPrint + shFrame + shShirt + shLarge + shDtf + shSpecial - shMisc;
     const totalReceived = shCash + shMomo + shBank + shPos;
     const discrepancy = totalReceived - totalSales;
 
@@ -2143,7 +2143,7 @@ export default function StaffDashboard({
       totalReceived,
       discrepancy
     };
-  }, [shPhoto, shPrint, shFrame, shShirt, shLarge, shDtf, shSpecial, shCash, shMomo, shBank, shPos]);
+  }, [shPhoto, shPrint, shFrame, shShirt, shLarge, shDtf, shSpecial, shCash, shMomo, shBank, shPos, shMisc]);
 
   // Auto-calculate today's sales from actual GPO orders and Jobs
   const recalculateShiftTotals = useCallback(() => {
