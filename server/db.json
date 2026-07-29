@@ -1,28 +1,340 @@
 {
   "printing_db_audit_logs": [
     {
+      "id": "log-1785364878251-435",
+      "timestamp": "2026-07-29T22:41:18.251Z",
+      "user": "Isaah Boadu Jnr",
+      "action": "Login",
+      "module": "Security",
+      "details": "Successfully authenticated into Printopia Digital Press terminal. Session initialized."
+    },
+    {
+      "id": "log-1785362215662-800",
+      "timestamp": "2026-07-29T21:56:55.662Z",
+      "user": "Isaah Boadu Jnr",
+      "action": "Login",
+      "module": "Security",
+      "details": "Successfully authenticated into Printopia Digital Press terminal. Session initialized."
+    },
+    {
+      "id": "log-1785356389267-502",
+      "user": "Admin",
+      "action": "Export",
+      "module": "Daily Report",
+      "details": "Downloaded comprehensive daily business report as PDF for 2026-07-29.",
+      "timestamp": "2026-07-29T20:19:49.267Z"
+    },
+    {
+      "id": "log-1785356374074-470",
+      "user": "Admin",
+      "action": "Edit",
+      "module": "Sales Report",
+      "details": "Approved End of Day sales report ID: rep-1785271993438.",
+      "timestamp": "2026-07-29T20:19:34.074Z"
+    },
+    {
+      "id": "log-1785356317383-350",
+      "user": "Admin",
+      "action": "Create",
+      "module": "Expenditures",
+      "details": "Logged monthly expenditure of GHS 425.00 for t shirts purchase.",
+      "timestamp": "2026-07-29T20:18:37.383Z"
+    },
+    {
+      "id": "log-1785356232670-496",
+      "user": "Isaah Boadu Jnr",
+      "action": "Login",
+      "module": "Security",
+      "details": "Successfully authenticated into Printopia Digital Press terminal. Session initialized.",
+      "timestamp": "2026-07-29T20:17:12.670Z"
+    },
+    {
+      "id": "log-1785356209540-66",
+      "user": "staff1",
+      "action": "Submit Report",
+      "module": "Shift Report",
+      "details": "Submitted EOD sales report for Day Shift. Total sales: GHS 1090.00, total received: GHS 1090.00, discrepancy: GHS 0.00.",
+      "timestamp": "2026-07-29T20:16:49.540Z"
+    },
+    {
+      "id": "log-1785356209540-637",
+      "user": "staff1",
+      "action": "Create",
+      "module": "Sales Report",
+      "details": "Submitted End of Day Sales Report for 2026-07-29 with Total GHS 1090.00.",
+      "timestamp": "2026-07-29T20:16:49.540Z"
+    },
+    {
+      "id": "log-1785356209384-934",
+      "user": "staff1",
+      "action": "Modify Input",
+      "module": "Staff Activity",
+      "details": "Staff input field \"e.g. Completed all wide format lamination. Balanced petty cash.\" changed from \"actual cash =\" to \"actual cash =165\"",
+      "timestamp": "2026-07-29T20:16:49.384Z"
+    },
+    {
+      "id": "log-1785356203735-300",
+      "user": "staff1",
+      "action": "Typing Activity",
+      "module": "Staff Activity",
+      "details": "Staff drafting field \"e.g. Completed all wide format lamination. Balanced petty cash.\" value: \"actual cash =\"",
+      "timestamp": "2026-07-29T20:16:43.735Z"
+    },
+    {
+      "id": "log-1785356019304-620",
+      "user": "staff1",
+      "action": "Create",
+      "module": "Expenses",
+      "details": "Logged minor expenditure of GHS 420.00 for: \"t shirts purchase\" (Office Supplies).",
+      "timestamp": "2026-07-29T20:13:39.304Z"
+    },
+    {
+      "id": "log-1785356019304-741",
+      "user": "staff1",
+      "action": "Create",
+      "module": "Daily Misc",
+      "details": "Logged local daily miscellaneous item GHS 420.00: t shirts purchase.",
+      "timestamp": "2026-07-29T20:13:39.304Z"
+    },
+    {
+      "id": "log-1785356011050-591",
+      "user": "staff1",
+      "action": "Modify Input",
+      "module": "Staff Activity",
+      "details": "Staff input field \"Amount Spent (GHS)\" changed from \"\" to \"420\"",
+      "timestamp": "2026-07-29T20:13:31.050Z"
+    },
+    {
+      "id": "log-1785356007576-155",
+      "user": "staff1",
+      "action": "Modify Input",
+      "module": "Staff Activity",
+      "details": "Staff input field \"Purified Drinking Water\" changed from \"\" to \"t shirts purchase\"",
+      "timestamp": "2026-07-29T20:13:27.576Z"
+    },
+    {
+      "id": "log-1785355977304-67",
+      "user": "staff1",
+      "action": "Login",
+      "module": "Security",
+      "details": "Successfully authenticated into Printopia Digital Press terminal. Session initialized.",
+      "timestamp": "2026-07-29T20:12:57.304Z"
+    },
+    {
+      "id": "log-1785355926102-830",
+      "user": "staff1",
+      "action": "Login",
+      "module": "Security",
+      "details": "Successfully authenticated into Printopia Digital Press terminal. Session initialized.",
+      "timestamp": "2026-07-29T20:12:06.102Z"
+    },
+    {
+      "id": "log-1785355868312-339",
+      "user": "staff1",
+      "action": "Typing Activity",
+      "module": "Staff Activity",
+      "details": "Staff drafting field \"e.g. Completed all wide format lamination. Balanced petty cash.\" value: \"actual cash = 165\"",
+      "timestamp": "2026-07-29T20:11:08.312Z"
+    },
+    {
+      "id": "log-1785355833994-653",
+      "user": "staff1",
+      "action": "Typing Activity",
+      "module": "Staff Activity",
+      "details": "Staff drafting field \"e.g. Completed all wide format lamination. Balanced petty cash.\" value: \"actual cash = \"",
+      "timestamp": "2026-07-29T20:10:33.994Z"
+    },
+    {
+      "id": "log-1785355802060-332",
+      "user": "staff1",
+      "action": "Login",
+      "module": "Security",
+      "details": "Successfully authenticated into Printopia Digital Press terminal. Session initialized.",
+      "timestamp": "2026-07-29T20:10:02.060Z"
+    },
+    {
+      "id": "log-1785355699894-699",
+      "user": "staff1",
+      "action": "Create",
+      "module": "Expenses",
+      "details": "Logged minor expenditure of GHS 420.00 for: \"t shirt \" (Utilities).",
+      "timestamp": "2026-07-29T20:08:19.894Z"
+    },
+    {
+      "id": "log-1785355699894-895",
+      "user": "staff1",
+      "action": "Create",
+      "module": "Daily Misc",
+      "details": "Logged local daily miscellaneous item GHS 420.00: t shirt .",
+      "timestamp": "2026-07-29T20:08:19.894Z"
+    },
+    {
+      "id": "log-1785355684334-252",
+      "user": "staff1",
+      "action": "Modify Input",
+      "module": "Staff Activity",
+      "details": "Staff input field \"Amount Spent (GHS)\" changed from \"\" to \"420\"",
+      "timestamp": "2026-07-29T20:08:04.334Z"
+    },
+    {
+      "id": "log-1785355669934-324",
+      "user": "staff1",
+      "action": "Modify Input",
+      "module": "Staff Activity",
+      "details": "Staff input field \"Purified Drinking Water\" changed from \"\" to \"t shirt \"",
+      "timestamp": "2026-07-29T20:07:49.934Z"
+    },
+    {
+      "id": "log-1785355595674-898",
+      "user": "staff1",
+      "action": "Create",
+      "module": "General Printing",
+      "details": "Created general order GPO-2026-0097 for 1111.",
+      "timestamp": "2026-07-29T20:06:35.674Z"
+    },
+    {
+      "id": "log-1785355595569-236",
+      "user": "staff1",
+      "action": "Modify Input",
+      "module": "Staff Activity",
+      "details": "Staff input field \"e.g. Client Name\" changed from \"\" to \"1111\"",
+      "timestamp": "2026-07-29T20:06:35.569Z"
+    },
+    {
+      "id": "log-1785355590497-693",
+      "user": "staff1",
+      "action": "Modify Input",
+      "module": "Staff Activity",
+      "details": "Staff input field \"Unit (GHS)\" changed from \"3\" to \"5\"",
+      "timestamp": "2026-07-29T20:06:30.497Z"
+    },
+    {
+      "id": "log-1785355585877-47",
+      "user": "staff1",
+      "action": "Modify Input",
+      "module": "Staff Activity",
+      "details": "Staff input field \"Qty\" changed from \"\" to \"1\"",
+      "timestamp": "2026-07-29T20:06:25.877Z"
+    },
+    {
+      "id": "log-1785355574734-63",
+      "user": "staff1",
+      "action": "Create",
+      "module": "General Printing",
+      "details": "Created general order GPO-2026-0096 for 11111.",
+      "timestamp": "2026-07-29T20:06:14.734Z"
+    },
+    {
+      "id": "log-1785355574260-286",
+      "user": "staff1",
+      "action": "Typing Activity",
+      "module": "Staff Activity",
+      "details": "Staff drafting field \"e.g. Client Name\" value: \"11111\"",
+      "timestamp": "2026-07-29T20:06:14.260Z"
+    },
+    {
+      "id": "log-1785355564409-203",
+      "user": "staff1",
+      "action": "Modify Input",
+      "module": "Staff Activity",
+      "details": "Staff input field \"Flat Price (GHS)\" changed from \"\" to \"200\"",
+      "timestamp": "2026-07-29T20:06:04.409Z"
+    },
+    {
+      "id": "log-1785355557485-379",
+      "user": "staff1",
+      "action": "Modify Input",
+      "module": "Staff Activity",
+      "details": "Staff input field \"e.g. Logo vector restoration\" changed from \"\" to \"t shirt printing\"",
+      "timestamp": "2026-07-29T20:05:57.485Z"
+    },
+    {
+      "id": "log-1785355545330-678",
+      "user": "staff1",
+      "action": "Create",
+      "module": "General Printing",
+      "details": "Created general order GPO-2026-0095 for 111111.",
+      "timestamp": "2026-07-29T20:05:45.330Z"
+    },
+    {
+      "id": "log-1785355542052-828",
+      "user": "staff1",
+      "action": "Modify Input",
+      "module": "Staff Activity",
+      "details": "Staff input field \"Flat Price (GHS)\" changed from \"\" to \"500\"",
+      "timestamp": "2026-07-29T20:05:42.052Z"
+    },
+    {
+      "id": "log-1785355538489-495",
+      "user": "staff1",
+      "action": "Modify Input",
+      "module": "Staff Activity",
+      "details": "Staff input field \"e.g. Logo vector restoration\" changed from \"\" to \"t shirt printing\"",
+      "timestamp": "2026-07-29T20:05:38.489Z"
+    },
+    {
+      "id": "log-1785355526986-830",
+      "user": "staff1",
+      "action": "Typing Activity",
+      "module": "Staff Activity",
+      "details": "Staff drafting field \"e.g. Client Name\" value: \"111111\"",
+      "timestamp": "2026-07-29T20:05:26.986Z"
+    },
+    {
+      "id": "log-1785355519903-734",
+      "user": "staff1",
+      "action": "Modify Input",
+      "module": "Staff Activity",
+      "details": "Staff input field \"Flat Price (GHS)\" changed from \"\" to \"502\"",
+      "timestamp": "2026-07-29T20:05:19.903Z"
+    },
+    {
+      "id": "log-1785355508281-35",
+      "user": "staff1",
+      "action": "Modify Input",
+      "module": "Staff Activity",
+      "details": "Staff input field \"e.g. Logo vector restoration\" changed from \"\" to \"t shirt printing\"",
+      "timestamp": "2026-07-29T20:05:08.281Z"
+    },
+    {
+      "id": "log-1785355364987-467",
+      "user": "staff1",
+      "action": "Typing Activity",
+      "module": "Staff Activity",
+      "details": "Staff drafting field \"e.g. Completed all wide format lamination. Balanced petty cash.\" value: \"actual cash= \"",
+      "timestamp": "2026-07-29T20:02:44.987Z"
+    },
+    {
+      "id": "log-1785355202466-212",
+      "user": "staff1",
+      "action": "Login",
+      "module": "Security",
+      "details": "Successfully authenticated into Printopia Digital Press terminal. Session initialized.",
+      "timestamp": "2026-07-29T20:00:02.466Z"
+    },
+    {
       "id": "log-1784506032731-281",
-      "timestamp": "2026-07-20T00:07:12.731Z",
       "user": "Isaah Boadu Jnr",
       "action": "Logout",
       "module": "Security",
-      "details": "Terminated terminal session."
+      "details": "Terminated terminal session.",
+      "timestamp": "2026-07-20T00:07:12.731Z"
     },
     {
       "id": "log-1784505979580-502",
-      "timestamp": "2026-07-20T00:06:19.580Z",
       "user": "Admin",
       "action": "Edit",
       "module": "Auth",
-      "details": "Updated credentials for staff1: terminal name \"staff1\", username \"staff1\". This is now their new login."
+      "details": "Updated credentials for staff1: terminal name \"staff1\", username \"staff1\". This is now their new login.",
+      "timestamp": "2026-07-20T00:06:19.580Z"
     },
     {
       "id": "log-1784505955053",
-      "timestamp": "2026-07-20T00:05:55.053Z",
       "user": "Admin",
       "action": "Purge Database",
       "module": "System Setup",
-      "details": "All shared business data was cleared by the administrator. Every connected device was reset to a blank ledger."
+      "details": "All shared business data was cleared by the administrator. Every connected device was reset to a blank ledger.",
+      "timestamp": "2026-07-20T00:05:55.053Z"
     }
   ],
   "printing_db_jobs": [],
@@ -45,7 +357,24 @@
   "__v_printing_db_notifications": 0,
   "__v_printing_db_staff_notes": 0,
   "__v_printing_db_staff_attendance": 0,
-  "printing_db_live_activity": [],
+  "printing_db_live_activity": [
+    {
+      "id": "live-1785364878255-148",
+      "timestamp": "2026-07-29T22:41:18.255Z",
+      "user": "Isaah Boadu Jnr",
+      "action": "Login",
+      "module": "Security",
+      "details": "Signed in to terminal"
+    },
+    {
+      "id": "live-1785362215664-517",
+      "timestamp": "2026-07-29T21:56:55.664Z",
+      "user": "Isaah Boadu Jnr",
+      "action": "Login",
+      "module": "Security",
+      "details": "Signed in to terminal"
+    }
+  ],
   "__v_printing_db_live_activity": 0,
   "__v_printing_db_deleted_jobs": 2,
   "printing_db_deleted_jobs": [

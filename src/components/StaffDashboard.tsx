@@ -424,6 +424,7 @@ export default function StaffDashboard({
   const miscs = useMemo(() => DBStore.getDailyMiscellaneous(), [refreshTrigger]);
   const reports = useMemo(() => DBStore.getDailySalesReports(), [refreshTrigger]);
   const inventoryList = useMemo(() => DBStore.getInventory(), [refreshTrigger]);
+  const expenditures = useMemo(() => DBStore.getExpenditures(), [refreshTrigger]);
 
   // Combine and format GPOs, Job payments, and Expenditures
   const unifiedTransactions = useMemo(() => {
@@ -773,18 +774,24 @@ export default function StaffDashboard({
     // Outstanding balances
     const outstandingBalances = jobs.reduce((sum, j) => sum + j.balance, 0);
 
-    // Today's Miscellaneous
+    // Today's Expenses (admin + staff miscellaneous)
+    const todayExpenditures = expenditures.filter(e => e.date === todayStr).reduce((sum, e) => sum + e.amount, 0);
     const todayMisc = miscs.filter(m => m.date === todayStr).reduce((sum, m) => sum + m.amount, 0);
+    const todayExpenses = todayExpenditures + todayMisc;
+
+    const todayNet = todaySales - todayExpenses;
 
     return {
       todaySales,
+      todayExpenses,
+      todayNet,
       jobsInProgress,
       completedJobs,
       pendingCollections,
       outstandingBalances,
       todayMisc
     };
-  }, [jobs, orders, miscs]);
+  }, [jobs, orders, miscs, expenditures]);
 
 
   // ----------------------------------------------------
@@ -2502,7 +2509,7 @@ export default function StaffDashboard({
         <div className="space-y-6">
           
           {/* Quick Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
             
             {/* 1. Today's Sales (Sales -> Royal Blue) */}
             <div className="relative rounded-2xl border-l-4 border-l-blue-600 border border-white/10 bg-gradient-to-br from-blue-500/5 via-transparent to-blue-500/10 backdrop-blur-md p-5 shadow-xl hover:shadow-blue-500/10 hover:-translate-y-1.5 transition-all duration-300 group overflow-hidden">
@@ -2569,7 +2576,18 @@ export default function StaffDashboard({
               </div>
               <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-black uppercase tracking-widest mt-8">Daily Expenses</p>
               <h3 className="text-lg font-black text-gray-950 dark:text-white mt-1 leading-none tracking-tight">
-                {currency} {metrics.todayMisc.toFixed(2)}
+                {currency} {metrics.todayExpenses.toFixed(2)}
+              </h3>
+            </div>
+
+            {/* 7. Today's Net (Profit -> Emerald) */}
+            <div className="relative rounded-2xl border-l-4 border-l-emerald-500 border border-white/10 bg-gradient-to-br from-emerald-500/5 via-transparent to-emerald-500/10 backdrop-blur-md p-5 shadow-xl hover:shadow-emerald-500/10 hover:-translate-y-1.5 transition-all duration-300 group overflow-hidden">
+              <div className="absolute top-3 right-3 opacity-15 text-emerald-500 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
+                <CircleDollarSign className="h-10 w-10" />
+              </div>
+              <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-black uppercase tracking-widest mt-8">Today's Net</p>
+              <h3 className={`text-lg font-black mt-1 leading-none tracking-tight ${metrics.todayNet >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                {currency} {metrics.todayNet.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </h3>
             </div>
           </div>
