@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -7,6 +7,7 @@ import React, { useState, useMemo, useRef } from "react";
 import { motion } from "motion/react";
 import {
   TrendingUp,
+  TrendingDown,
   CircleDollarSign,
   Briefcase,
   AlertTriangle,
@@ -32,6 +33,9 @@ import {
   BookOpen,
   UploadCloud,
   Receipt,
+  Calendar,
+  ArrowUpRight,
+  ArrowDownRight,
   X
 } from "lucide-react";
 import {
@@ -572,14 +576,50 @@ export default function AdminDashboard({
   }, [refreshTrigger]);
 
   // ----------------------------------------------------
-  // COMPREHENSIVE MONTHLY ANALYTICS (for Reports + Statistics)
+  // MONTH SELECTION & UTILITIES FOR REPORTS
   // ----------------------------------------------------
-  const monthAnalytics = useMemo(() => {
-    const currentMonth = new Date().toISOString().substring(0, 7);
-    const monthJobs = jobs.filter(j => j.date.startsWith(currentMonth));
-    const monthOrders = orders.filter(o => o.date.startsWith(currentMonth));
-    const monthExps = expenditures.filter(e => e.date.startsWith(currentMonth));
-    const monthMiscs = miscs.filter(m => m.date.startsWith(currentMonth));
+  const [selectedReportMonth, setSelectedReportMonth] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+
+  const getPreviousMonthString = (monthStr: string) => {
+    const [y, m] = (monthStr || "").split("-").map(Number);
+    if (!y || !m) {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
+    }
+    const prevDate = new Date(y, m - 2, 1);
+    return `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+  };
+
+  const getNextMonthString = (monthStr: string) => {
+    const [y, m] = (monthStr || "").split("-").map(Number);
+    if (!y || !m) {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 2).padStart(2, "0")}`;
+    }
+    const nextDate = new Date(y, m, 1);
+    return `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
+  };
+
+  const formatMonthLabel = (monthStr: string) => {
+    const [y, m] = (monthStr || "").split("-").map(Number);
+    if (!y || !m) return monthStr;
+    const date = new Date(y, m - 1, 1);
+    return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  };
+
+  const previousReportMonth = useMemo(() => getPreviousMonthString(selectedReportMonth), [selectedReportMonth]);
+
+  // ----------------------------------------------------
+  // COMPREHENSIVE MONTHLY ANALYTICS CALCULATOR
+  // ----------------------------------------------------
+  const computeMonthlyAnalytics = (targetMonth: string) => {
+    const monthJobs = jobs.filter(j => j.date.startsWith(targetMonth));
+    const monthOrders = orders.filter(o => o.date.startsWith(targetMonth));
+    const monthExps = expenditures.filter(e => e.date.startsWith(targetMonth));
+    const monthMiscs = miscs.filter(m => m.date.startsWith(targetMonth));
 
     // Revenue = order totals + job deposits
     const revenue = monthOrders.reduce((s, o) => s + o.grandTotal, 0) + monthJobs.reduce((s, j) => s + j.depositPaid, 0);
@@ -590,16 +630,17 @@ export default function AdminDashboard({
     // Staff attendance / late
     const staffAttendanceList = DBStore.getStaffAttendance();
     const staffNotesList = DBStore.getStaffNotes();
-    const monthAttendance = staffAttendanceList.filter(a => a.date.startsWith(currentMonth));
-    const monthLateNotes = staffNotesList.filter(n => n.date.startsWith(currentMonth) && n.sessionType === "Late Arrival");
+    const monthAttendance = staffAttendanceList.filter(a => a.date.startsWith(targetMonth));
+    const monthLateNotes = staffNotesList.filter(n => n.date.startsWith(targetMonth) && n.sessionType === "Late Arrival");
     const totalLate = monthLateNotes.length;
     const totalSessions = monthAttendance.length;
 
     // Daily revenue trend (across the month)
-    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    const [y, m] = (targetMonth || "").split("-").map(Number);
+    const daysInMonth = (y && m) ? new Date(y, m, 0).getDate() : 30;
     const daily: { day: string; Revenue: number; Expenses: number; Net: number }[] = [];
     for (let d = 1; d <= daysInMonth; d++) {
-      const ds = `${currentMonth}-${String(d).padStart(2, "0")}`;
+      const ds = `${targetMonth}-${String(d).padStart(2, "0")}`;
       const r = monthOrders.filter(o => o.date === ds).reduce((s, o) => s + o.grandTotal, 0)
         + monthJobs.filter(j => j.date === ds).reduce((s, j) => s + j.depositPaid, 0);
       const e = monthExps.filter(x => x.date === ds).reduce((s, x) => s + x.amount, 0)
@@ -611,17 +652,39 @@ export default function AdminDashboard({
     // Jobs per day (line)
     const jobsPerDay: { day: string; Jobs: number }[] = daily.map(d => ({
       day: d.day,
-      Jobs: monthJobs.filter(j => j.date === `${currentMonth}-${d.day.padStart(2, "0")}`).length
+      Jobs: monthJobs.filter(j => j.date === `${targetMonth}-${d.day.padStart(2, "0")}`).length
     }));
 
-    // Service channel breakdown with percentages
-    const photocopy = monthOrders.reduce((s, o) => s + (o.photocopy?.amount || 0), 0);
-    const printing = monthOrders.reduce((s, o) => s + (o.printing?.amount || 0), 0);
-    const frames = monthOrders.reduce((s, o) => s + (o.frame?.amount || 0), 0);
-    const tshirts = monthOrders.reduce((s, o) => s + (o.tshirt?.amount || 0), 0);
-    const largeFormat = monthOrders.reduce((s, o) => s + (o.largeFormat?.sticker?.amount || 0) + (o.largeFormat?.banner?.amount || 0), 0);
-    const dtf = monthOrders.reduce((s, o) => s + (o.dtf?.a3?.amount || 0) + (o.dtf?.a4?.amount || 0), 0);
-    const special = monthOrders.reduce((s, o) => s + (o.specialServices || []).reduce((a: number, b: any) => a + (b.amount || 0), 0), 0);
+    // Service channel breakdown with percentages for target month
+    let photocopy = monthOrders.reduce((s, o) => s + (o.photocopy?.amount || 0), 0);
+    let printing = monthOrders.reduce((s, o) => s + (o.printing?.amount || 0), 0);
+    let frames = monthOrders.reduce((s, o) => s + (o.frame?.amount || 0), 0);
+    let tshirts = monthOrders.reduce((s, o) => s + (o.tshirt?.amount || 0), 0);
+    let largeFormat = monthOrders.reduce((s, o) => s + (o.largeFormat?.sticker?.amount || 0) + (o.largeFormat?.banner?.amount || 0), 0);
+    let dtf = monthOrders.reduce((s, o) => s + (o.dtf?.a3?.amount || 0) + (o.dtf?.a4?.amount || 0), 0);
+    let special = monthOrders.reduce((s, o) => s + (o.specialServices || []).reduce((a: number, b: any) => a + (b.amount || 0), 0), 0);
+
+    // Also include custom contract jobs attribution by keyword for this month
+    monthJobs.forEach(j => {
+      const desc = (j.jobDescription || "").toLowerCase();
+      if (desc.includes("shirt") || desc.includes("cotton")) tshirts += j.depositPaid;
+      else if (desc.includes("banner") || desc.includes("sticker")) largeFormat += j.depositPaid;
+      else if (desc.includes("dtf")) dtf += j.depositPaid;
+      else if (desc.includes("frame")) frames += j.depositPaid;
+      else photocopy += j.depositPaid;
+    });
+
+    const categorySales = {
+      photocopy,
+      printing,
+      frames,
+      tshirts,
+      largeFormat,
+      dtf,
+      special,
+      totalSales: photocopy + printing + frames + tshirts + largeFormat + dtf + special
+    };
+
     const channelsRaw = [
       { name: "Photocopy", value: photocopy },
       { name: "Color Printing", value: printing },
@@ -691,7 +754,7 @@ export default function AdminDashboard({
         late: monthLateNotes.filter(n => n.staffName === name).length,
         sessions: monthAttendance.filter(a => a.staffName === name).length,
         jobs: monthJobs.filter(j => j.assignedStaff === name).length,
-        reports: reports.filter(r => r.staffName === name && r.date.startsWith(currentMonth)).length
+        reports: reports.filter(r => r.staffName === name && r.date.startsWith(targetMonth)).length
       });
     });
 
@@ -700,9 +763,13 @@ export default function AdminDashboard({
     const materialsUsed = inventory.reduce((s, i) => s + i.used, 0);
 
     return {
-      currentMonth,
+      month: targetMonth,
+      currentMonth: targetMonth,
+      monthLabel: formatMonthLabel(targetMonth),
       monthJobs,
       monthOrders,
+      monthExps,
+      monthMiscs,
       revenue,
       expenses,
       profit,
@@ -713,6 +780,7 @@ export default function AdminDashboard({
       jobsPerDay,
       serviceChannels,
       channelsTotal,
+      categorySales,
       completedJobs,
       completionRate,
       avgJobValue,
@@ -724,7 +792,39 @@ export default function AdminDashboard({
       lowStock,
       materialsUsed
     };
-  }, [jobs, orders, expenditures, miscs, reports, inventory, refreshTrigger]);
+  };
+
+  const monthAnalytics = useMemo(() => {
+    return computeMonthlyAnalytics(selectedReportMonth);
+  }, [selectedReportMonth, jobs, orders, expenditures, miscs, reports, inventory, refreshTrigger]);
+
+  const prevMonthAnalytics = useMemo(() => {
+    return computeMonthlyAnalytics(previousReportMonth);
+  }, [previousReportMonth, jobs, orders, expenditures, miscs, reports, inventory, refreshTrigger]);
+
+  // Month-over-Month (MoM) Comparison deltas
+  const momComparison = useMemo(() => {
+    const calcDelta = (cur: number, prev: number) => {
+      const diff = cur - prev;
+      const pct = prev !== 0
+        ? ((cur - prev) / Math.abs(prev)) * 100
+        : cur !== 0 ? 100 : 0;
+      return { diff, pct };
+    };
+
+    return {
+      revenue: calcDelta(monthAnalytics.revenue, prevMonthAnalytics.revenue),
+      expenses: calcDelta(monthAnalytics.expenses, prevMonthAnalytics.expenses),
+      profit: calcDelta(monthAnalytics.profit, prevMonthAnalytics.profit),
+      jobs: calcDelta(monthAnalytics.monthJobs.length, prevMonthAnalytics.monthJobs.length),
+      orders: calcDelta(monthAnalytics.monthOrders.length, prevMonthAnalytics.monthOrders.length),
+      outstanding: calcDelta(monthAnalytics.outstanding, prevMonthAnalytics.outstanding),
+      completionRate: calcDelta(monthAnalytics.completionRate, prevMonthAnalytics.completionRate),
+      lateArrivals: calcDelta(monthAnalytics.totalLate, prevMonthAnalytics.totalLate),
+      sessions: calcDelta(monthAnalytics.totalSessions, prevMonthAnalytics.totalSessions),
+      avgJobValue: calcDelta(monthAnalytics.avgJobValue, prevMonthAnalytics.avgJobValue)
+    };
+  }, [monthAnalytics, prevMonthAnalytics]);
 
 
   // ----------------------------------------------------
@@ -1391,8 +1491,13 @@ export default function AdminDashboard({
     }
   };
 
-  const handleDownloadMonthlyReport = () => {
-    DBStore.addAuditLog("Admin", "Export", "Monthly Report", `Downloaded comprehensive monthly business report as PDF.`);
+  const handleDownloadMonthlyReport = (monthToDownload?: string) => {
+    const targetMonth = monthToDownload || selectedReportMonth;
+    const targetPrevMonth = getPreviousMonthString(targetMonth);
+    const curLabel = formatMonthLabel(targetMonth);
+    const prevLabel = formatMonthLabel(targetPrevMonth);
+
+    DBStore.addAuditLog("Admin", "Export", "Monthly Report", `Downloaded comprehensive monthly business report as PDF for ${targetMonth} (compared with ${targetPrevMonth}).`);
     
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -1400,18 +1505,41 @@ export default function AdminDashboard({
     const contentWidth = pageWidth - margin * 2;
     let yPos = 20;
 
-    const currentMonth = new Date().toISOString().substring(0, 7);
-    const monthJobs = jobs.filter(j => j.date.startsWith(currentMonth));
-    const monthOrders = orders.filter(o => o.date.startsWith(currentMonth));
+    // Selected Month Data
+    const monthJobs = jobs.filter(j => j.date.startsWith(targetMonth));
+    const monthOrders = orders.filter(o => o.date.startsWith(targetMonth));
     const monthRevenue = monthOrders.reduce((sum, o) => sum + o.grandTotal, 0) + monthJobs.reduce((sum, j) => sum + j.depositPaid, 0);
-    const monthExpenses = expenditures.filter(e => e.date.startsWith(currentMonth)).reduce((sum, e) => sum + e.amount, 0) + miscs.filter(m => m.date.startsWith(currentMonth)).reduce((sum, m) => sum + m.amount, 0);
+    const monthExpenses = expenditures.filter(e => e.date.startsWith(targetMonth)).reduce((sum, e) => sum + e.amount, 0) + miscs.filter(m => m.date.startsWith(targetMonth)).reduce((sum, m) => sum + m.amount, 0);
     const monthProfit = monthRevenue - monthExpenses;
     const monthOutstanding = monthJobs.reduce((sum, j) => sum + j.balance, 0);
     
     const staffNotesList = DBStore.getStaffNotes();
-    const monthLateNotes = staffNotesList.filter(n => n.date.startsWith(currentMonth) && n.sessionType === "Late Arrival");
+    const monthLateNotes = staffNotesList.filter(n => n.date.startsWith(targetMonth) && n.sessionType === "Late Arrival");
     const staffAttendanceList = DBStore.getStaffAttendance();
-    const monthAttendance = staffAttendanceList.filter(a => a.date.startsWith(currentMonth));
+    const monthAttendance = staffAttendanceList.filter(a => a.date.startsWith(targetMonth));
+    const completedJobs = monthJobs.filter(j => j.status === "Ready" || j.status === "Delivered").length;
+    const completionRate = monthJobs.length ? (completedJobs / monthJobs.length) * 100 : 0;
+
+    // Previous Month Data for MoM Comparison
+    const prevJobs = jobs.filter(j => j.date.startsWith(targetPrevMonth));
+    const prevOrders = orders.filter(o => o.date.startsWith(targetPrevMonth));
+    const prevRevenue = prevOrders.reduce((sum, o) => sum + o.grandTotal, 0) + prevJobs.reduce((sum, j) => sum + j.depositPaid, 0);
+    const prevExpenses = expenditures.filter(e => e.date.startsWith(targetPrevMonth)).reduce((sum, e) => sum + e.amount, 0) + miscs.filter(m => m.date.startsWith(targetPrevMonth)).reduce((sum, m) => sum + m.amount, 0);
+    const prevProfit = prevRevenue - prevExpenses;
+    const prevOutstanding = prevJobs.reduce((sum, j) => sum + j.balance, 0);
+    const prevLateNotes = staffNotesList.filter(n => n.date.startsWith(targetPrevMonth) && n.sessionType === "Late Arrival");
+    const prevAttendance = staffAttendanceList.filter(a => a.date.startsWith(targetPrevMonth));
+    const prevCompletedJobs = prevJobs.filter(j => j.status === "Ready" || j.status === "Delivered").length;
+    const prevCompletionRate = prevJobs.length ? (prevCompletedJobs / prevJobs.length) * 100 : 0;
+
+    const calcMomPill = (cur: number, prev: number, isPercent = false, isCurrency = false) => {
+      const diff = cur - prev;
+      if (prev === 0 && cur === 0) return "0.0% (No change)";
+      if (prev === 0) return `+100.0% (+${isCurrency ? currency + " " : ""}${cur.toFixed(2)})`;
+      const pct = ((cur - prev) / Math.abs(prev)) * 100;
+      const sign = pct >= 0 ? "+" : "";
+      return `${sign}${pct.toFixed(1)}% (${sign}${isCurrency ? currency + " " : ""}${diff.toFixed(2)}${isPercent ? "%" : ""})`;
+    };
 
     // Helper to add section header
     const addSectionHeader = (title: string, color: [number, number, number]) => {
@@ -1452,40 +1580,42 @@ export default function AdminDashboard({
     doc.text(settings.companyName || "PRINTOPIA DIGITAL PRESS", margin, 15);
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text("Monthly Business Performance Report", margin, 22);
+    doc.text("Monthly Business Performance & Comparison Report", margin, 22);
     doc.setFontSize(8);
-    doc.text(`Report Period: ${currentMonth} | Generated: ${new Date().toLocaleString()}`, margin, 29);
+    doc.text(`Report Period: ${curLabel} (${targetMonth}) | Previous Month: ${prevLabel} (${targetPrevMonth}) | Generated: ${new Date().toLocaleString()}`, margin, 29);
     doc.setTextColor(0, 0, 0);
     yPos = 42;
 
-    // Financial Summary Section
-    addSectionHeader("Financial Summary", [30, 58, 138]);
-    addNote("This section shows the overall financial health of the business for the selected month. Revenue includes all general order totals and job deposits. Expenses include both admin expenditures and staff miscellaneous expenses.");
+    // Financial Summary Section with MoM Comparison
+    addSectionHeader("Financial Summary & MoM Comparison", [30, 58, 138]);
+    addNote(`Overall financial health for ${curLabel} compared side-by-side with ${prevLabel}. Revenue includes order totals + deposits. Expenses include admin expenditures + misc spends.`);
     
     const kpiData = [
-      ["Total Revenue", `${currency} ${monthRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, "Sum of all general printing orders + job deposits"],
-      ["Total Expenditures", `${currency} ${monthExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, "Admin expenditures + staff miscellaneous expenses"],
-      ["Net Profit", `${currency} ${monthProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, "Revenue minus all expenses. Positive = profitable month"],
-      ["Outstanding Balances", `${currency} ${monthOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, "Money owed by clients for jobs not yet fully paid"],
-      ["Jobs Created", `${monthJobs.length}`, "Total custom contract jobs opened this month"],
-      ["General Orders", `${monthOrders.length}`, "Total over-the-counter general printing orders"],
-      ["Late Arrivals", `${monthLateNotes.length}`, "Documented staff tardiness incidents this month"],
-      ["Attendance Sessions", `${monthAttendance.length}`, "Clock-in / clock-out records captured this month"],
-      ["Job Completion Rate", `${((monthJobs.filter(j => j.status === "Ready" || j.status === "Delivered").length / (monthJobs.length || 1)) * 100).toFixed(1)}%`, "Share of jobs reaching Ready/Delivered status"],
+      ["Total Revenue", `${currency} ${monthRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, `${currency} ${prevRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, calcMomPill(monthRevenue, prevRevenue, false, true), "General orders + job deposits"],
+      ["Total Expenditures", `${currency} ${monthExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, `${currency} ${prevExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, calcMomPill(monthExpenses, prevExpenses, false, true), "Admin expenditures + staff miscellaneous"],
+      ["Net Profit / Loss", `${currency} ${monthProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, `${currency} ${prevProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, calcMomPill(monthProfit, prevProfit, false, true), "Revenue minus all expenses"],
+      ["Outstanding Balances", `${currency} ${monthOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, `${currency} ${prevOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, calcMomPill(monthOutstanding, prevOutstanding, false, true), "Money owed by clients for open jobs"],
+      ["Jobs Created", `${monthJobs.length}`, `${prevJobs.length}`, `${monthJobs.length - prevJobs.length >= 0 ? "+" : ""}${monthJobs.length - prevJobs.length} jobs`, "Custom contract jobs created"],
+      ["General Orders", `${monthOrders.length}`, `${prevOrders.length}`, `${monthOrders.length - prevOrders.length >= 0 ? "+" : ""}${monthOrders.length - prevOrders.length} orders`, "Over-the-counter print orders"],
+      ["Late Arrivals", `${monthLateNotes.length}`, `${prevLateNotes.length}`, `${monthLateNotes.length - prevLateNotes.length >= 0 ? "+" : ""}${monthLateNotes.length - prevLateNotes.length} incidents`, "Documented staff late arrivals"],
+      ["Attendance Sessions", `${monthAttendance.length}`, `${prevAttendance.length}`, `${monthAttendance.length - prevAttendance.length >= 0 ? "+" : ""}${monthAttendance.length - prevAttendance.length} sessions`, "Clock-in records captured"],
+      ["Job Completion Rate", `${completionRate.toFixed(1)}%`, `${prevCompletionRate.toFixed(1)}%`, `${completionRate - prevCompletionRate >= 0 ? "+" : ""}${(completionRate - prevCompletionRate).toFixed(1)}%`, "Jobs marked Ready / Delivered"],
     ];
 
     (autoTable as any)(doc, {
       startY: yPos,
-      head: [["Metric", "Value", "Explanation"]],
+      head: [["Metric", `Current (${curLabel})`, `Previous (${prevLabel})`, "MoM Change", "Explanation"]],
       body: kpiData,
       theme: "grid",
-      headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9 },
-      bodyStyles: { fontSize: 9, textColor: [40, 40, 40] },
+      headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8 },
+      bodyStyles: { fontSize: 8, textColor: [40, 40, 40] },
       alternateRowStyles: { fillColor: [245, 247, 250] },
       columnStyles: {
-        0: { cellWidth: 50, fontStyle: "bold" },
-        1: { cellWidth: 50, halign: "right", fontStyle: "bold", textColor: [20, 30, 80] },
-        2: { cellWidth: 90 }
+        0: { cellWidth: 42, fontStyle: "bold" },
+        1: { cellWidth: 32, halign: "right", fontStyle: "bold", textColor: [20, 30, 80] },
+        2: { cellWidth: 32, halign: "right" },
+        3: { cellWidth: 34, halign: "center", fontStyle: "bold", textColor: [16, 120, 80] },
+        4: { cellWidth: 40 }
       },
       margin: { left: margin, right: margin }
     });
@@ -1493,13 +1623,14 @@ export default function AdminDashboard({
     yPos = (doc as any).lastAutoTable.finalY + 8;
 
     // Daily Net Performance Section
-    addSectionHeader("Daily Net Performance", [20, 80, 160]);
-    addNote("Day-by-day breakdown of sales, expenses, and the net amount remaining after expenses are deducted. This shows exactly how much was left each day.");
+    addSectionHeader(`Daily Net Performance (${curLabel})`, [20, 80, 160]);
+    addNote("Day-by-day breakdown of sales, expenses, and the net amount remaining after expenses are deducted.");
 
-    const daysInMonthForPdf = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    const [targetY, targetM] = (targetMonth || "").split("-").map(Number);
+    const daysInMonthForPdf = (targetY && targetM) ? new Date(targetY, targetM, 0).getDate() : 30;
     const dailyNetRows: string[][] = [];
     for (let d = 1; d <= daysInMonthForPdf; d++) {
-      const ds = `${currentMonth}-${String(d).padStart(2, "0")}`;
+      const ds = `${targetMonth}-${String(d).padStart(2, "0")}`;
       const daySales = monthOrders.filter((o: any) => o.date === ds).reduce((s: number, o: any) => s + (o.grandTotal || 0), 0)
         + monthJobs.filter((j: any) => j.date === ds).reduce((s: number, j: any) => s + (j.depositPaid || 0), 0);
       const dayExpenses = expenditures.filter((e: any) => e.date === ds).reduce((s: number, e: any) => s + (e.amount || 0), 0)
@@ -1536,7 +1667,7 @@ export default function AdminDashboard({
       });
     } else {
       doc.setFontSize(9);
-      doc.text("No sales or expenses recorded this month.", margin, yPos);
+      doc.text(`No sales or expenses recorded in ${curLabel}.`, margin, yPos);
       yPos += 6;
     }
 
@@ -1544,15 +1675,15 @@ export default function AdminDashboard({
 
     // Revenue Breakdown Section
     addSectionHeader("Revenue Channel Breakdown", [16, 120, 80]);
-    addNote("This table breaks down exactly which services generated the most income. Use this to identify your top-performing products and which services may need more marketing.");
+    addNote(`Products and services that generated revenue during ${curLabel}.`);
 
-    const photocopy = orders.reduce((s, o) => s + (o.photocopy?.amount || 0), 0);
-    const printing = orders.reduce((s, o) => s + (o.printing?.amount || 0), 0);
-    const frames = orders.reduce((s, o) => s + (o.frame?.amount || 0), 0);
-    const tshirts = orders.reduce((s, o) => s + (o.tshirt?.amount || 0), 0);
-    const largeFormat = orders.reduce((s, o) => s + (o.largeFormat?.sticker?.amount || 0) + (o.largeFormat?.banner?.amount || 0), 0);
-    const dtf = orders.reduce((s, o) => s + (o.dtf?.a3?.amount || 0) + (o.dtf?.a4?.amount || 0), 0);
-    const special = orders.reduce((s, o) => s + (o.specialServices || []).reduce((a: number, b: any) => a + (b.amount || 0), 0), 0);
+    const photocopy = monthOrders.reduce((s, o) => s + (o.photocopy?.amount || 0), 0);
+    const printing = monthOrders.reduce((s, o) => s + (o.printing?.amount || 0), 0);
+    const frames = monthOrders.reduce((s, o) => s + (o.frame?.amount || 0), 0);
+    const tshirts = monthOrders.reduce((s, o) => s + (o.tshirt?.amount || 0), 0);
+    const largeFormat = monthOrders.reduce((s, o) => s + (o.largeFormat?.sticker?.amount || 0) + (o.largeFormat?.banner?.amount || 0), 0);
+    const dtf = monthOrders.reduce((s, o) => s + (o.dtf?.a3?.amount || 0) + (o.dtf?.a4?.amount || 0), 0);
+    const special = monthOrders.reduce((s, o) => s + (o.specialServices || []).reduce((a: number, b: any) => a + (b.amount || 0), 0), 0);
 
     const channels = [
       ["Photocopy Service", photocopy],
@@ -1567,7 +1698,7 @@ export default function AdminDashboard({
     (autoTable as any)(doc, {
       startY: yPos,
       head: [["Service Channel", `Amount (${currency})`, "% of Total"]],
-      body: channels.map(c => [c[0], c[1].toFixed(2), ((c[1] / (monthRevenue || 1)) * 100).toFixed(1) + "%"]),
+      body: channels.map(c => [c[0], Number(c[1]).toFixed(2), ((Number(c[1]) / (monthRevenue || 1)) * 100).toFixed(1) + "%"]),
       theme: "grid",
       headStyles: { fillColor: [16, 120, 80], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9 },
       bodyStyles: { fontSize: 9 },
@@ -1583,20 +1714,20 @@ export default function AdminDashboard({
     yPos = (doc as any).lastAutoTable.finalY + 8;
 
     // Job Breakdown Section
-    addSectionHeader("Monthly Job Breakdown", [138, 43, 226]);
-    addNote("Every custom contract job created this month is listed below. Check 'Balance' to see who still owes money. 'Priority' helps you identify urgent vs routine work.");
+    addSectionHeader(`Custom Contract Jobs (${curLabel})`, [138, 43, 226]);
+    addNote(`Every custom contract job created in ${curLabel}. Check 'Balance' to see open receivables.`);
 
     if (monthJobs.length > 0) {
       const jobRows = monthJobs.map(j => [
         j.jobNumber,
         j.customerName,
-        j.jobDescription.substring(0, 30) + (j.jobDescription.length > 30 ? "..." : ""),
+        (j.jobDescription || "").substring(0, 30) + ((j.jobDescription || "").length > 30 ? "..." : ""),
         `${currency} ${j.totalAmount.toFixed(2)}`,
         `${currency} ${j.depositPaid.toFixed(2)}`,
         `${currency} ${j.balance.toFixed(2)}`,
         j.status,
         j.priority,
-        j.assignedStaff
+        j.assignedStaff || "Unassigned"
       ]);
 
       (autoTable as any)(doc, {
@@ -1622,18 +1753,18 @@ export default function AdminDashboard({
       });
     } else {
       doc.setFontSize(9);
-      doc.text("No jobs created this month.", margin, yPos);
+      doc.text(`No jobs created in ${curLabel}.`, margin, yPos);
       yPos += 6;
     }
 
     yPos = (doc as any).lastAutoTable.finalY + 8;
 
     // Expenditure Breakdown Section
-    addSectionHeader("Monthly Expenditure Breakdown", [220, 38, 38]);
-    addNote("All money leaving the business this month. This includes raw material purchases (admin) and daily miscellaneous spending by staff. Compare against Revenue to see if the business is profitable.");
+    addSectionHeader(`Monthly Expenditure Journal (${curLabel})`, [220, 38, 38]);
+    addNote(`All money leaving the business in ${curLabel} (admin material purchases + staff misc spends).`);
 
-    const monthExpenditures = expenditures.filter(e => e.date.startsWith(currentMonth));
-    const monthMiscs = miscs.filter(m => m.date.startsWith(currentMonth));
+    const monthExpenditures = expenditures.filter(e => e.date.startsWith(targetMonth));
+    const monthMiscs = miscs.filter(m => m.date.startsWith(targetMonth));
     const combinedExpenses = [
       ...monthExpenditures.map(e => ({ ...e, _type: "Expenditure" as const })),
       ...monthMiscs.map(m => ({ ...m, _type: "Miscellaneous" as const, category: "Miscellaneous" as const }))
@@ -1669,15 +1800,15 @@ export default function AdminDashboard({
       });
     } else {
       doc.setFontSize(9);
-      doc.text("No expenditures recorded this month.", margin, yPos);
+      doc.text(`No expenditures recorded in ${curLabel}.`, margin, yPos);
       yPos += 6;
     }
 
     yPos = (doc as any).lastAutoTable.finalY + 8;
 
     // Staff Attendance Section
-    addSectionHeader("Staff Attendance Sessions", [30, 80, 160]);
-    addNote("Clock-in and clock-out sessions recorded by staff and admin this month. Use this to verify attendance patterns and identify chronic late arrivals.");
+    addSectionHeader(`Staff Attendance Sessions (${curLabel})`, [30, 80, 160]);
+    addNote(`Clock-in and clock-out sessions recorded during ${curLabel}.`);
 
     if (monthAttendance.length > 0) {
       const attRows = monthAttendance.map(a => [
@@ -1709,21 +1840,21 @@ export default function AdminDashboard({
       });
     } else {
       doc.setFontSize(9);
-      doc.text("No attendance sessions recorded this month.", margin, yPos);
+      doc.text(`No attendance sessions recorded in ${curLabel}.`, margin, yPos);
       yPos += 6;
     }
 
     yPos = (doc as any).lastAutoTable.finalY + 8;
 
     // Late Arrival Section
-    addSectionHeader("Late Arrival Incidents", [200, 120, 20]);
-    addNote("Incidents where staff arrived late to work, documented by admin. These notes are used for performance reviews and payroll adjustments.");
+    addSectionHeader(`Late Arrival Incidents (${curLabel})`, [200, 120, 20]);
+    addNote(`Documented tardiness incidents during ${curLabel}.`);
 
     if (monthLateNotes.length > 0) {
       const lateRows = monthLateNotes.map(n => [
         n.date,
         n.staffName,
-        n.note.substring(0, 50) + (n.note.length > 50 ? "..." : ""),
+        (n.note || "").substring(0, 50) + ((n.note || "").length > 50 ? "..." : ""),
         new Date(n.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       ]);
 
@@ -1746,7 +1877,7 @@ export default function AdminDashboard({
     } else {
       doc.setFontSize(9);
       doc.setTextColor(40, 160, 40);
-      doc.text("Excellent! No late arrival incidents recorded this month.", margin, yPos);
+      doc.text(`Excellent! No late arrival incidents recorded in ${curLabel}.`, margin, yPos);
       doc.setTextColor(0, 0, 0);
       yPos += 6;
     }
@@ -1754,13 +1885,12 @@ export default function AdminDashboard({
     yPos = (doc as any).lastAutoTable.finalY + 10;
 
     // Daily Expense Trend Section
-    addSectionHeader("Daily Expense Trend", [200, 90, 30]);
-    addNote("How much was spent on each active day of the month. Spikes usually coincide with bulk material purchases or salary runs.");
+    addSectionHeader(`Daily Expense Trend (${curLabel})`, [200, 90, 30]);
+    addNote("Daily spend distribution across the active days of the month.");
     {
       const dailyExp: { day: string; amount: number }[] = [];
-      const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-      for (let d = 1; d <= daysInMonth; d++) {
-        const ds = `${currentMonth}-${String(d).padStart(2, "0")}`;
+      for (let d = 1; d <= daysInMonthForPdf; d++) {
+        const ds = `${targetMonth}-${String(d).padStart(2, "0")}`;
         const amt = monthExpenditures.filter(e => e.date === ds).reduce((s, e) => s + e.amount, 0) +
           monthMiscs.filter(m => m.date === ds).reduce((s, m) => s + m.amount, 0);
         if (amt > 0) dailyExp.push({ day: String(d), amount: amt });
@@ -1779,15 +1909,15 @@ export default function AdminDashboard({
         });
       } else {
         doc.setFontSize(9);
-        doc.text("No expenses recorded this month.", margin, yPos);
+        doc.text(`No expenses recorded in ${curLabel}.`, margin, yPos);
         yPos += 6;
       }
     }
     yPos = (doc as any).lastAutoTable.finalY + 8;
 
     // Top Suppliers Section
-    addSectionHeader("Top Suppliers", [30, 130, 170]);
-    addNote("Vendors the business paid the most this month. Use to negotiate bulk discounts or evaluate supplier reliance.");
+    addSectionHeader(`Top Suppliers (${curLabel})`, [30, 130, 170]);
+    addNote("Vendors paid the most during this month.");
     {
       const supplierTotals: Record<string, number> = {};
       monthExpenditures.forEach(e => {
@@ -1812,15 +1942,15 @@ export default function AdminDashboard({
         });
       } else {
         doc.setFontSize(9);
-        doc.text("No supplier payments recorded this month.", margin, yPos);
+        doc.text(`No supplier payments recorded in ${curLabel}.`, margin, yPos);
         yPos += 6;
       }
     }
     yPos = (doc as any).lastAutoTable.finalY + 8;
 
     // Staff Performance Section
-    addSectionHeader("Staff Performance Summary", [20, 130, 90]);
-    addNote("Per-staff breakdown of late arrivals, attendance sessions, jobs completed, and shift reports submitted. Helps with payroll and performance reviews.");
+    addSectionHeader(`Staff Performance Summary (${curLabel})`, [20, 130, 90]);
+    addNote("Per-staff summary of lateness, attendance, jobs completed, and shift reports.");
     {
       const staffAccountsList = DBStore.getStaffAccounts();
       const allNames = Array.from(new Set([
@@ -1835,7 +1965,7 @@ export default function AdminDashboard({
           String(monthLateNotes.filter(n => n.staffName === name).length),
           String(monthAttendance.filter(a => a.staffName === name).length),
           String(monthJobs.filter(j => j.assignedStaff === name).length),
-          String(reports.filter(r => r.staffName === name && r.date.startsWith(currentMonth)).length)
+          String(reports.filter(r => r.staffName === name && r.date.startsWith(targetMonth)).length)
         ]);
         (autoTable as any)(doc, {
           startY: yPos,
@@ -1856,22 +1986,22 @@ export default function AdminDashboard({
         });
       } else {
         doc.setFontSize(9);
-        doc.text("No staff activity recorded this month.", margin, yPos);
+        doc.text(`No staff activity recorded in ${curLabel}.`, margin, yPos);
         yPos += 6;
       }
     }
     yPos = (doc as any).lastAutoTable.finalY + 8;
 
     // Inventory Status Section
-    addSectionHeader("Inventory Status", [20, 110, 180]);
-    addNote("Current stock levels across all SKUs. Items at or below their minimum alert level are flagged so the admin knows what to reorder.");
+    addSectionHeader("Inventory Status & Materials Consumed", [20, 110, 180]);
+    addNote("Current stock levels across all SKUs and units consumed.");
     {
       const lowStock = inventory.filter(i => i.remainingStock <= i.minimumStock);
       const materialsUsed = inventory.reduce((s, i) => s + i.used, 0);
       const invSummary = [
         ["Total SKUs Cataloged", String(inventory.length)],
         ["Items Below Minimum Level", String(lowStock.length)],
-        ["Total Units Used This Month", String(materialsUsed)]
+        ["Total Units Used", String(materialsUsed)]
       ];
       (autoTable as any)(doc, {
         startY: yPos,
@@ -1921,10 +2051,10 @@ export default function AdminDashboard({
     yPos = (doc as any).lastAutoTable.finalY + 10;
 
     // Deleted Jobs / Refunds Section
-    addSectionHeader("Deleted Work & Refunds", [185, 14, 14]);
-    addNote("Jobs that were deleted by staff during the month (customer mind-change / cancelled work). The refunded amounts are subtracted from gross job revenue above.");
+    addSectionHeader(`Deleted Work & Refunds (${curLabel})`, [185, 14, 14]);
+    addNote("Jobs deleted or refunded during this reporting month.");
     {
-      const monthDeleted = DBStore.getDeletedJobs().filter(d => (d.timestamp || "").startsWith(currentMonth));
+      const monthDeleted = DBStore.getDeletedJobs().filter(d => (d.timestamp || "").startsWith(targetMonth));
       const totalRefund = monthDeleted.reduce((s, d) => s + (d.refundAmount || 0), 0);
       const delSummary = [
         ["Jobs Deleted This Month", String(monthDeleted.length)],
@@ -1970,7 +2100,7 @@ export default function AdminDashboard({
       } else {
         doc.setFontSize(9);
         doc.setTextColor(40, 160, 40);
-        doc.text("No jobs were deleted this month.", margin, yPos);
+        doc.text(`No jobs were deleted in ${curLabel}.`, margin, yPos);
         doc.setTextColor(0, 0, 0);
       }
     }
@@ -1982,10 +2112,10 @@ export default function AdminDashboard({
     doc.setFontSize(8);
     doc.setTextColor(100, 100, 100);
     doc.text("This report was generated by Printopia Digital Press Management System.", margin, yPos + 6);
-    doc.text("All figures are calculated from real-time recorded transactions. No manual adjustments applied.", margin, yPos + 10);
+    doc.text(`Period: ${curLabel} | Comparing against: ${prevLabel}. All figures from real-time records.`, margin, yPos + 10);
     doc.text("CONFIDENTIAL — For internal business review only.", pageWidth - margin, yPos + 10, { align: "right" });
 
-    doc.save(`Printopia_Monthly_Business_Report_${currentMonth}.pdf`);
+    doc.save(`Printopia_Monthly_Business_Report_${targetMonth}.pdf`);
   };
 
   const handleDownloadDailyReport = () => {
@@ -3465,28 +3595,94 @@ export default function AdminDashboard({
           {/* Top CMYK Accent Bar */}
           <div className="cmyk-bar absolute top-0 left-0 right-0 h-[3px]" />
 
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/10 pb-4">
+          {/* Top Header & Action Buttons */}
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-white/10 pb-4">
             <div>
-              <h2 className="text-base font-black text-gray-900 dark:text-white uppercase tracking-tight">Monthly Business Performance Report</h2>
-              <p className="text-xs text-gray-400 dark:text-zinc-500 font-medium">Aggregated revenue channels and material transaction audits</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-black text-gray-900 dark:text-white uppercase tracking-tight">Monthly Business Performance Report</h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                  {monthAnalytics.monthLabel}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 dark:text-zinc-500 font-medium mt-0.5">
+                Aggregated revenue channels, cost audits, and Month-over-Month comparison vs <strong className="text-gray-700 dark:text-zinc-300">{prevMonthAnalytics.monthLabel}</strong>
+              </p>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => handleDownloadMonthlyReport()} className="inline-flex items-center gap-1 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-black py-2 px-4 rounded-xl text-xs shadow-md transition cursor-pointer">
-                <Download className="h-3.5 w-3.5" /> Download Monthly Business Report
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={() => handleDownloadMonthlyReport(selectedReportMonth)} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-black py-2 px-3.5 rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95">
+                <Download className="h-3.5 w-3.5" /> Download Report (PDF)
               </button>
-              <button onClick={() => handleExport("pdf")} className="inline-flex items-center gap-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-black py-2 px-4 rounded-xl text-xs shadow-md transition cursor-pointer">
-                <Download className="h-3.5 w-3.5" /> Export PDF Report
+              <button onClick={() => handleExport("pdf")} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-black py-2 px-3.5 rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95">
+                <Download className="h-3.5 w-3.5" /> Print Summary
               </button>
-              <button onClick={() => handleExport("excel")} className="inline-flex items-center gap-1 border border-white/10 dark:border-zinc-800 text-gray-700 dark:text-zinc-300 font-bold py-2 px-4 rounded-xl text-xs transition-all cursor-pointer bg-white/10 dark:bg-zinc-900/40 hover:bg-white/20 backdrop-blur-md">
-                <Download className="h-3.5 w-3.5" /> Excel Full Ledger
+              <button onClick={() => handleExport("excel")} className="inline-flex items-center gap-1 border border-white/10 dark:border-zinc-800 text-gray-700 dark:text-zinc-300 font-bold py-2 px-3 rounded-xl text-xs transition-all cursor-pointer bg-white/10 dark:bg-zinc-900/40 hover:bg-white/20 backdrop-blur-md">
+                <Download className="h-3.5 w-3.5" /> Full Ledger
               </button>
-              <button onClick={() => handleExport("jobs")} className="inline-flex items-center gap-1 border border-white/10 dark:border-zinc-800 text-gray-750 dark:text-zinc-300 font-bold py-2 px-4 rounded-xl text-xs transition-all cursor-pointer bg-white/10 dark:bg-zinc-900/40 hover:bg-white/20 backdrop-blur-md">
-                <Download className="h-3.5 w-3.5 text-blue-500" /> Jobs Spreadsheet
+              <button onClick={() => handleExport("jobs")} className="inline-flex items-center gap-1 border border-white/10 dark:border-zinc-800 text-gray-750 dark:text-zinc-300 font-bold py-2 px-3 rounded-xl text-xs transition-all cursor-pointer bg-white/10 dark:bg-zinc-900/40 hover:bg-white/20 backdrop-blur-md">
+                <Download className="h-3.5 w-3.5 text-blue-500" /> Jobs
               </button>
-              <button onClick={() => handleExport("inventory")} className="inline-flex items-center gap-1 border border-white/10 dark:border-zinc-800 text-gray-750 dark:text-zinc-300 font-bold py-2 px-4 rounded-xl text-xs transition-all cursor-pointer bg-white/10 dark:bg-zinc-900/40 hover:bg-white/20 backdrop-blur-md">
-                <Download className="h-3.5 w-3.5 text-emerald-500" /> Inventory Spreadsheet
+              <button onClick={() => handleExport("inventory")} className="inline-flex items-center gap-1 border border-white/10 dark:border-zinc-800 text-gray-750 dark:text-zinc-300 font-bold py-2 px-3 rounded-xl text-xs transition-all cursor-pointer bg-white/10 dark:bg-zinc-900/40 hover:bg-white/20 backdrop-blur-md">
+                <Download className="h-3.5 w-3.5 text-emerald-500" /> Inventory
               </button>
+            </div>
+          </div>
+
+          {/* Month Selector & Comparison Navigation Control */}
+          <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 dark:from-blue-950/40 dark:via-indigo-950/40 dark:to-purple-950/40 border border-blue-500/20 dark:border-blue-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={() => setSelectedReportMonth(previousReportMonth)}
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-white/60 dark:bg-zinc-900/70 border border-white/20 dark:border-zinc-700 text-xs font-black text-gray-800 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-800 transition cursor-pointer shadow-sm active:scale-95"
+                title="Go to previous month"
+              >
+                <ChevronLeft className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <span>Prev Month</span>
+              </button>
+
+              <div className="relative flex items-center">
+                <div className="flex items-center gap-2 bg-white/80 dark:bg-zinc-900/90 border border-blue-500/30 rounded-xl px-3 py-1.5 shadow-sm">
+                  <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <input
+                    type="month"
+                    value={selectedReportMonth}
+                    onChange={(e) => {
+                      if (e.target.value) setSelectedReportMonth(e.target.value);
+                    }}
+                    className="bg-transparent text-xs font-black text-gray-900 dark:text-white cursor-pointer focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedReportMonth(getNextMonthString(selectedReportMonth))}
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-white/60 dark:bg-zinc-900/70 border border-white/20 dark:border-zinc-700 text-xs font-black text-gray-800 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-800 transition cursor-pointer shadow-sm active:scale-95"
+                title="Go to next month"
+              >
+                <span>Next Month</span>
+                <ChevronRight className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              </button>
+
+              {selectedReportMonth !== new Date().toISOString().substring(0, 7) && (
+                <button
+                  onClick={() => setSelectedReportMonth(new Date().toISOString().substring(0, 7))}
+                  className="px-2.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black transition cursor-pointer shadow-sm active:scale-95"
+                  title="Jump to current month"
+                >
+                  This Month
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 text-[11px] font-bold">
+              <span className="text-gray-500 dark:text-zinc-400">Comparing:</span>
+              <span className="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 font-black font-mono">
+                {monthAnalytics.monthLabel}
+              </span>
+              <span className="text-gray-400">vs</span>
+              <span className="px-2 py-1 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20 font-black font-mono">
+                {prevMonthAnalytics.monthLabel} (Previous)
+              </span>
             </div>
           </div>
 
@@ -3496,34 +3692,260 @@ export default function AdminDashboard({
               <div className="rounded-2xl border border-white/10 overflow-hidden shadow-lg">
                 <div className="bg-gradient-to-r from-blue-700 to-indigo-700 px-6 py-3">
                   <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
-                    <FileText className="h-4 w-4" /> Executive Summary
+                    <FileText className="h-4 w-4" /> Executive Summary — {monthAnalytics.monthLabel}
                   </h3>
-                  <p className="text-[10px] text-blue-100 font-medium">High-level financial and operational overview for the current month</p>
+                  <p className="text-[10px] text-blue-100 font-medium">Financial and operational breakdown with Month-over-Month comparison against {prevMonthAnalytics.monthLabel}</p>
                 </div>
                 <div className="bg-white/5 dark:bg-zinc-900/20 px-6 py-3">
                   <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium leading-relaxed">
-                    This summary consolidates the most important figures for the month. <strong className="text-gray-700 dark:text-zinc-300">Revenue</strong> includes all general order totals plus job deposits. <strong className="text-gray-700 dark:text-zinc-300">Expenses</strong> include admin expenditures and staff miscellaneous spends. A positive <strong className="text-gray-700 dark:text-zinc-300">Net Profit</strong> indicates a profitable month. <strong className="text-gray-700 dark:text-zinc-300">Outstanding Balances</strong> are amounts still owed by clients.
+                    This summary consolidates key performance indicators for <strong className="text-gray-700 dark:text-zinc-300">{monthAnalytics.monthLabel}</strong> compared directly with <strong className="text-gray-700 dark:text-zinc-300">{prevMonthAnalytics.monthLabel}</strong>. <strong className="text-gray-700 dark:text-zinc-300">Revenue</strong> includes all general order totals plus job deposits. <strong className="text-gray-700 dark:text-zinc-300">Expenses</strong> include admin expenditures and staff miscellaneous spends.
                   </p>
                 </div>
                 <div className="bg-white/5 dark:bg-zinc-900/20">
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-px bg-white/10">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-white/10">
                     {[
-                      { label: "Total Revenue", value: `${currency} ${monthAnalytics.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, tone: "text-emerald-600 dark:text-emerald-400" },
-                      { label: "Total Expenses", value: `${currency} ${monthAnalytics.expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, tone: "text-rose-600 dark:text-rose-400" },
-                      { label: "Net Profit / Loss", value: `${currency} ${monthAnalytics.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, tone: monthAnalytics.profit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400" },
-                      { label: "Total Jobs Created", value: monthAnalytics.monthJobs.length, tone: "text-gray-900 dark:text-white" },
-                      { label: "Total General Orders", value: monthAnalytics.monthOrders.length, tone: "text-gray-900 dark:text-white" },
-                      { label: "Outstanding Balances", value: `${currency} ${monthAnalytics.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, tone: "text-amber-600 dark:text-amber-400" },
-                      { label: "Late Arrivals", value: monthAnalytics.totalLate, tone: "text-amber-600 dark:text-amber-400" },
-                      { label: "Attendance Sessions", value: monthAnalytics.totalSessions, tone: "text-indigo-600 dark:text-indigo-400" },
-                      { label: "Job Completion Rate", value: `${monthAnalytics.completionRate.toFixed(1)}%`, tone: "text-blue-600 dark:text-blue-400" },
+                      {
+                        label: "Total Revenue",
+                        value: `${currency} ${monthAnalytics.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                        prevValue: `${currency} ${prevMonthAnalytics.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                        delta: momComparison.revenue,
+                        tone: "text-emerald-600 dark:text-emerald-400",
+                        isCurrency: true
+                      },
+                      {
+                        label: "Total Expenses",
+                        value: `${currency} ${monthAnalytics.expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                        prevValue: `${currency} ${prevMonthAnalytics.expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                        delta: momComparison.expenses,
+                        tone: "text-rose-600 dark:text-rose-400",
+                        isExpense: true,
+                        isCurrency: true
+                      },
+                      {
+                        label: "Net Profit / Loss",
+                        value: `${currency} ${monthAnalytics.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                        prevValue: `${currency} ${prevMonthAnalytics.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                        delta: momComparison.profit,
+                        tone: monthAnalytics.profit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+                        isCurrency: true
+                      },
+                      {
+                        label: "Total Jobs Created",
+                        value: `${monthAnalytics.monthJobs.length} jobs`,
+                        prevValue: `${prevMonthAnalytics.monthJobs.length} jobs`,
+                        delta: momComparison.jobs,
+                        tone: "text-gray-900 dark:text-white"
+                      },
+                      {
+                        label: "Total General Orders",
+                        value: `${monthAnalytics.monthOrders.length} orders`,
+                        prevValue: `${prevMonthAnalytics.monthOrders.length} orders`,
+                        delta: momComparison.orders,
+                        tone: "text-gray-900 dark:text-white"
+                      },
+                      {
+                        label: "Outstanding Balances",
+                        value: `${currency} ${monthAnalytics.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                        prevValue: `${currency} ${prevMonthAnalytics.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                        delta: momComparison.outstanding,
+                        tone: "text-amber-600 dark:text-amber-400",
+                        isCurrency: true
+                      },
+                      {
+                        label: "Late Arrivals",
+                        value: `${monthAnalytics.totalLate} incidents`,
+                        prevValue: `${prevMonthAnalytics.totalLate} incidents`,
+                        delta: momComparison.lateArrivals,
+                        tone: "text-amber-600 dark:text-amber-400"
+                      },
+                      {
+                        label: "Attendance Sessions",
+                        value: `${monthAnalytics.totalSessions} sessions`,
+                        prevValue: `${prevMonthAnalytics.totalSessions} sessions`,
+                        delta: momComparison.sessions,
+                        tone: "text-indigo-600 dark:text-indigo-400"
+                      },
+                      {
+                        label: "Job Completion Rate",
+                        value: `${monthAnalytics.completionRate.toFixed(1)}%`,
+                        prevValue: `${prevMonthAnalytics.completionRate.toFixed(1)}%`,
+                        delta: momComparison.completionRate,
+                        tone: "text-blue-600 dark:text-blue-400"
+                      },
                     ].map((card, i) => (
-                      <div key={i} className="bg-white/5 dark:bg-zinc-900/20 p-4 flex flex-col justify-center">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-zinc-500">{card.label}</span>
-                        <span className={`text-base font-black mt-1 ${card.tone}`}>{card.value}</span>
+                      <div key={i} className="bg-white/5 dark:bg-zinc-900/20 p-4 flex flex-col justify-between">
+                        <div>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-zinc-500">{card.label}</span>
+                          <span className={`text-base font-black mt-1 block ${card.tone}`}>{card.value}</span>
+                        </div>
+                        <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-[9px] font-bold">
+                          <span className="text-gray-400 dark:text-zinc-500 font-mono">Prev: {card.prevValue}</span>
+                          <span className={`px-1.5 py-0.5 rounded font-black flex items-center gap-0.5 ${
+                            card.delta.diff > 0 
+                              ? card.isExpense ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                              : card.delta.diff < 0
+                              ? card.isExpense ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                              : "bg-gray-500/10 text-gray-500 dark:text-zinc-400"
+                          }`}>
+                            {card.delta.diff > 0 ? <ArrowUpRight className="h-2.5 w-2.5" /> : card.delta.diff < 0 ? <ArrowDownRight className="h-2.5 w-2.5" /> : null}
+                            {card.delta.diff > 0 ? "+" : ""}{card.delta.pct.toFixed(0)}%
+                          </span>
+                        </div>
                       </div>
                     ))}
                   </div>
+                </div>
+              </div>
+
+              {/* ===== MONTH-OVER-MONTH (MoM) COMPARISON TABLE ===== */}
+              <div className="rounded-2xl border border-white/10 overflow-hidden shadow-lg">
+                <div className="bg-gradient-to-r from-purple-700 via-indigo-700 to-blue-700 px-6 py-3 flex justify-between items-center">
+                  <div>
+                    <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4" /> Month-over-Month (MoM) Comparison
+                    </h3>
+                    <p className="text-[10px] text-blue-100 font-medium">
+                      Comparing {monthAnalytics.monthLabel} directly against {prevMonthAnalytics.monthLabel}
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-mono font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-white/20 text-white backdrop-blur-md">
+                    {monthAnalytics.month} vs {prevMonthAnalytics.month}
+                  </span>
+                </div>
+                <div className="bg-white/5 dark:bg-zinc-900/20 overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-gradient-to-r from-purple-500/10 to-indigo-500/10 dark:from-purple-950/30 dark:to-indigo-950/30 text-purple-900 dark:text-purple-200 font-black uppercase tracking-wider text-[10px] border-b border-white/10">
+                        <th className="py-3 px-4">Performance Metric</th>
+                        <th className="py-3 px-4 text-right">{monthAnalytics.monthLabel} (Selected)</th>
+                        <th className="py-3 px-4 text-right">{prevMonthAnalytics.monthLabel} (Previous)</th>
+                        <th className="py-3 px-4 text-right">Net Difference</th>
+                        <th className="py-3 px-4 text-right">MoM Growth</th>
+                        <th className="py-3 px-4 text-center">Trend</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {[
+                        {
+                          name: "Gross Revenue (Orders + Deposits)",
+                          cur: `${currency} ${monthAnalytics.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          prev: `${currency} ${prevMonthAnalytics.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          diff: `${momComparison.revenue.diff >= 0 ? "+" : ""}${currency} ${momComparison.revenue.diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          pct: momComparison.revenue.pct,
+                          isPositive: momComparison.revenue.diff >= 0,
+                          isBetter: momComparison.revenue.diff >= 0
+                        },
+                        {
+                          name: "Total Expenditures (Admin + Misc)",
+                          cur: `${currency} ${monthAnalytics.expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          prev: `${currency} ${prevMonthAnalytics.expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          diff: `${momComparison.expenses.diff >= 0 ? "+" : ""}${currency} ${momComparison.expenses.diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          pct: momComparison.expenses.pct,
+                          isPositive: momComparison.expenses.diff >= 0,
+                          isBetter: momComparison.expenses.diff <= 0
+                        },
+                        {
+                          name: "Net Profit / Loss",
+                          cur: `${currency} ${monthAnalytics.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          prev: `${currency} ${prevMonthAnalytics.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          diff: `${momComparison.profit.diff >= 0 ? "+" : ""}${currency} ${momComparison.profit.diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          pct: momComparison.profit.pct,
+                          isPositive: momComparison.profit.diff >= 0,
+                          isBetter: momComparison.profit.diff >= 0
+                        },
+                        {
+                          name: "Contract Jobs Created",
+                          cur: `${monthAnalytics.monthJobs.length} jobs`,
+                          prev: `${prevMonthAnalytics.monthJobs.length} jobs`,
+                          diff: `${momComparison.jobs.diff >= 0 ? "+" : ""}${momComparison.jobs.diff} jobs`,
+                          pct: momComparison.jobs.pct,
+                          isPositive: momComparison.jobs.diff >= 0,
+                          isBetter: momComparison.jobs.diff >= 0
+                        },
+                        {
+                          name: "General Printing Orders",
+                          cur: `${monthAnalytics.monthOrders.length} orders`,
+                          prev: `${prevMonthAnalytics.monthOrders.length} orders`,
+                          diff: `${momComparison.orders.diff >= 0 ? "+" : ""}${momComparison.orders.diff} orders`,
+                          pct: momComparison.orders.pct,
+                          isPositive: momComparison.orders.diff >= 0,
+                          isBetter: momComparison.orders.diff >= 0
+                        },
+                        {
+                          name: "Average Contract Job Value",
+                          cur: `${currency} ${monthAnalytics.avgJobValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          prev: `${currency} ${prevMonthAnalytics.avgJobValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          diff: `${momComparison.avgJobValue.diff >= 0 ? "+" : ""}${currency} ${momComparison.avgJobValue.diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          pct: momComparison.avgJobValue.pct,
+                          isPositive: momComparison.avgJobValue.diff >= 0,
+                          isBetter: momComparison.avgJobValue.diff >= 0
+                        },
+                        {
+                          name: "Job Completion Rate",
+                          cur: `${monthAnalytics.completionRate.toFixed(1)}%`,
+                          prev: `${prevMonthAnalytics.completionRate.toFixed(1)}%`,
+                          diff: `${momComparison.completionRate.diff >= 0 ? "+" : ""}${(momComparison.completionRate.diff).toFixed(1)}%`,
+                          pct: momComparison.completionRate.pct,
+                          isPositive: momComparison.completionRate.diff >= 0,
+                          isBetter: momComparison.completionRate.diff >= 0
+                        },
+                        {
+                          name: "Outstanding Client Balances",
+                          cur: `${currency} ${monthAnalytics.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          prev: `${currency} ${prevMonthAnalytics.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          diff: `${momComparison.outstanding.diff >= 0 ? "+" : ""}${currency} ${momComparison.outstanding.diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                          pct: momComparison.outstanding.pct,
+                          isPositive: momComparison.outstanding.diff >= 0,
+                          isBetter: momComparison.outstanding.diff <= 0
+                        },
+                        {
+                          name: "Staff Late Arrival Incidents",
+                          cur: `${monthAnalytics.totalLate}`,
+                          prev: `${prevMonthAnalytics.totalLate}`,
+                          diff: `${momComparison.lateArrivals.diff >= 0 ? "+" : ""}${momComparison.lateArrivals.diff}`,
+                          pct: momComparison.lateArrivals.pct,
+                          isPositive: momComparison.lateArrivals.diff >= 0,
+                          isBetter: momComparison.lateArrivals.diff <= 0
+                        },
+                        {
+                          name: "Staff Attendance Sessions",
+                          cur: `${monthAnalytics.totalSessions}`,
+                          prev: `${prevMonthAnalytics.totalSessions}`,
+                          diff: `${momComparison.sessions.diff >= 0 ? "+" : ""}${momComparison.sessions.diff}`,
+                          pct: momComparison.sessions.pct,
+                          isPositive: momComparison.sessions.diff >= 0,
+                          isBetter: momComparison.sessions.diff >= 0
+                        }
+                      ].map((row, idx) => (
+                        <tr key={idx} className={`hover:bg-white/5 transition-colors ${idx % 2 === 0 ? "bg-white/2 dark:bg-white/1" : ""}`}>
+                          <td className="py-3 px-4 font-bold text-gray-800 dark:text-zinc-200">{row.name}</td>
+                          <td className="py-3 px-4 text-right font-black text-gray-900 dark:text-white">{row.cur}</td>
+                          <td className="py-3 px-4 text-right font-mono text-gray-500 dark:text-zinc-400">{row.prev}</td>
+                          <td className={`py-3 px-4 text-right font-bold ${row.isBetter ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                            {row.diff}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black inline-block font-mono ${
+                              row.isBetter ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                            }`}>
+                              {row.isPositive ? "+" : ""}{row.pct.toFixed(1)}%
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {row.isBetter ? (
+                              <span className="inline-flex items-center text-emerald-600 dark:text-emerald-400 font-bold text-[10px]">
+                                <ArrowUpRight className="h-3 w-3" /> Improved
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center text-rose-600 dark:text-rose-400 font-bold text-[10px]">
+                                <ArrowDownRight className="h-3 w-3" /> Decreased
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
@@ -3531,9 +3953,9 @@ export default function AdminDashboard({
             <div className="rounded-2xl border border-white/10 overflow-hidden shadow-lg">
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3">
                 <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
-                  <Briefcase className="h-4 w-4" /> Job Performance
+                  <Briefcase className="h-4 w-4" /> Job Performance — {monthAnalytics.monthLabel}
                 </h3>
-                <p className="text-[10px] text-blue-100 font-medium">Every custom contract job created this month, with completion metrics</p>
+                <p className="text-[10px] text-blue-100 font-medium">Every custom contract job created in {monthAnalytics.monthLabel}, with completion metrics</p>
               </div>
               <div className="bg-white/5 dark:bg-zinc-900/20 px-6 py-3">
                 <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium leading-relaxed">
@@ -3577,7 +3999,7 @@ export default function AdminDashboard({
                     {(() => {
                       const monthJobs = monthAnalytics.monthJobs;
                       if (monthJobs.length === 0) {
-                        return <tr><td colSpan={9} className="py-6 text-center text-gray-400 dark:text-zinc-500 text-[10px]">No jobs created this month.</td></tr>;
+                        return <tr><td colSpan={9} className="py-6 text-center text-gray-400 dark:text-zinc-500 text-[10px]">No jobs created in {monthAnalytics.monthLabel}.</td></tr>;
                       }
                       return monthJobs.map((job, i) => (
                         <tr key={job.id} className={`hover:bg-white/5 transition-colors ${i % 2 === 0 ? "bg-white/2 dark:bg-white/1" : ""}`}>
@@ -3601,7 +4023,7 @@ export default function AdminDashboard({
                               {job.priority}
                             </span>
                           </td>
-                          <td className="py-3 px-3 text-gray-600 dark:text-zinc-400">{job.assignedStaff}</td>
+                          <td className="py-3 px-3 text-gray-600 dark:text-zinc-400">{job.assignedStaff || "Unassigned"}</td>
                         </tr>
                       ));
                     })()}
@@ -3614,7 +4036,7 @@ export default function AdminDashboard({
                 <div className="space-y-2">
                   <h4 className="text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest">Jobs by Staff Member</h4>
                   {monthAnalytics.jobsByStaff.length === 0 ? (
-                    <p className="text-[10px] text-gray-400 dark:text-zinc-500">No jobs assigned this month.</p>
+                    <p className="text-[10px] text-gray-400 dark:text-zinc-500">No jobs assigned in {monthAnalytics.monthLabel}.</p>
                   ) : monthAnalytics.jobsByStaff.map(s => (
                     <div key={s.staff} className="flex justify-between items-center text-xs border border-white/5 px-3 py-2 rounded-lg bg-white/5 dark:bg-zinc-900/20">
                       <span className="font-semibold text-gray-700 dark:text-zinc-300">{s.staff}</span>
@@ -3641,19 +4063,19 @@ export default function AdminDashboard({
             <div className="rounded-2xl border border-white/10 overflow-hidden shadow-lg">
               <div className="bg-gradient-to-r from-rose-600 to-red-700 px-6 py-3">
                 <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
-                  <CircleDollarSign className="h-4 w-4" /> Expenditure Analysis
+                  <CircleDollarSign className="h-4 w-4" /> Expenditure Analysis — {monthAnalytics.monthLabel}
                 </h3>
-                <p className="text-[10px] text-rose-100 font-medium">All money leaving the business this month (admin + staff)</p>
+                <p className="text-[10px] text-rose-100 font-medium">All money leaving the business in {monthAnalytics.monthLabel} (admin purchases + staff misc spends)</p>
               </div>
               <div className="bg-white/5 dark:bg-zinc-900/20 px-6 py-3">
                 <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium leading-relaxed">
-                  Spend is grouped by <strong className="text-gray-700 dark:text-zinc-300">category</strong> and <strong className="text-gray-700 dark:text-zinc-300">supplier</strong> below. Compare total expenses against the month's revenue to confirm profitability.
+                  Spend is grouped by <strong className="text-gray-700 dark:text-zinc-300">category</strong> and <strong className="text-gray-700 dark:text-zinc-300">supplier</strong> below for {monthAnalytics.monthLabel}. Compare total expenses against the month's revenue to confirm profitability.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">
                   <div className="space-y-2">
                     <h4 className="text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest">Category Breakdown</h4>
                     {monthAnalytics.categoryBreakdown.length === 0 ? (
-                      <p className="text-[10px] text-gray-400 dark:text-zinc-500">No expenses recorded this month.</p>
+                      <p className="text-[10px] text-gray-400 dark:text-zinc-500">No expenses recorded in {monthAnalytics.monthLabel}.</p>
                     ) : monthAnalytics.categoryBreakdown.map(c => {
                       const pct = monthAnalytics.expenses ? (c.amount / monthAnalytics.expenses) * 100 : 0;
                       return (
@@ -3672,7 +4094,7 @@ export default function AdminDashboard({
                   <div className="space-y-2">
                     <h4 className="text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest">Top Suppliers</h4>
                     {monthAnalytics.topSuppliers.length === 0 ? (
-                      <p className="text-[10px] text-gray-400 dark:text-zinc-500">No supplier spend recorded.</p>
+                      <p className="text-[10px] text-gray-400 dark:text-zinc-500">No supplier spend recorded in {monthAnalytics.monthLabel}.</p>
                     ) : monthAnalytics.topSuppliers.map((s, i) => (
                       <div key={i} className="flex justify-between items-center border border-white/5 px-3 py-2 rounded-lg bg-white/5 dark:bg-zinc-900/20 text-xs">
                         <span className="font-semibold text-gray-700 dark:text-zinc-300">{s.name}</span>
@@ -3695,16 +4117,13 @@ export default function AdminDashboard({
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {(() => {
-                      const currentMonth = new Date().toISOString().substring(0, 7);
-                      const monthExpenditures = expenditures.filter(e => e.date.startsWith(currentMonth));
-                      const monthMiscs = miscs.filter(m => m.date.startsWith(currentMonth));
                       const combined = [
-                        ...monthExpenditures.map(e => ({ ...e, _type: "Expenditure" as const })),
-                        ...monthMiscs.map(m => ({ ...m, _type: "Miscellaneous" as const, category: "Miscellaneous" as const }))
+                        ...monthAnalytics.monthExps.map(e => ({ ...e, _type: "Expenditure" as const })),
+                        ...monthAnalytics.monthMiscs.map(m => ({ ...m, _type: "Miscellaneous" as const, category: "Miscellaneous" as const }))
                       ].sort((a, b) => b.date.localeCompare(a.date));
 
                       if (combined.length === 0) {
-                        return <tr><td colSpan={5} className="py-6 text-center text-gray-400 dark:text-zinc-500 text-[10px]">No expenditures this month.</td></tr>;
+                        return <tr><td colSpan={5} className="py-6 text-center text-gray-400 dark:text-zinc-500 text-[10px]">No expenditures in {monthAnalytics.monthLabel}.</td></tr>;
                       }
                       return combined.map((item, i) => (
                         <tr key={item.id} className={`hover:bg-white/5 transition-colors ${i % 2 === 0 ? "bg-white/2 dark:bg-white/1" : ""}`}>
@@ -3729,9 +4148,9 @@ export default function AdminDashboard({
             <div className="rounded-2xl border border-white/10 overflow-hidden shadow-lg">
               <div className="bg-gradient-to-r from-emerald-600 to-teal-700 px-6 py-3">
                 <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
-                  <UserCheck className="h-4 w-4" /> Staff Performance
+                  <UserCheck className="h-4 w-4" /> Staff Performance — {monthAnalytics.monthLabel}
                 </h3>
-                <p className="text-[10px] text-emerald-100 font-medium">Attendance, lateness, jobs and shift reports per staff member</p>
+                <p className="text-[10px] text-emerald-100 font-medium">Attendance, lateness, jobs and shift reports per staff member in {monthAnalytics.monthLabel}</p>
               </div>
               <div className="bg-white/5 dark:bg-zinc-900/20 overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
@@ -3746,7 +4165,7 @@ export default function AdminDashboard({
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {monthAnalytics.staffPerformance.length === 0 ? (
-                      <tr><td colSpan={5} className="py-6 text-center text-gray-400 dark:text-zinc-500 text-[10px]">No staff activity recorded this month.</td></tr>
+                      <tr><td colSpan={5} className="py-6 text-center text-gray-400 dark:text-zinc-500 text-[10px]">No staff activity recorded in {monthAnalytics.monthLabel}.</td></tr>
                     ) : monthAnalytics.staffPerformance.map((s, i) => (
                       <tr key={i} className={`hover:bg-white/5 transition-colors ${i % 2 === 0 ? "bg-white/2 dark:bg-white/1" : ""}`}>
                         <td className="py-3 px-4 font-semibold text-gray-900 dark:text-white">{s.staff}</td>
@@ -3767,7 +4186,7 @@ export default function AdminDashboard({
                 <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
                   <Boxes className="h-4 w-4" /> Inventory Status
                 </h3>
-                <p className="text-[10px] text-cyan-100 font-medium">Current stock levels and materials consumed this month</p>
+                <p className="text-[10px] text-cyan-100 font-medium">Current stock levels and materials consumed in {monthAnalytics.monthLabel}</p>
               </div>
               <div className="bg-white/5 dark:bg-zinc-900/20 px-6 py-3">
                 <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium leading-relaxed">
@@ -3809,18 +4228,18 @@ export default function AdminDashboard({
               <div className="rounded-2xl border border-white/10 overflow-hidden shadow-lg">
                 <div className="bg-gradient-to-r from-violet-600 to-purple-700 px-6 py-3">
                   <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4" /> Revenue Breakdown
+                    <TrendingUp className="h-4 w-4" /> Revenue Breakdown — {monthAnalytics.monthLabel}
                   </h3>
-                  <p className="text-[10px] text-violet-100 font-medium">Service channel share and daily revenue trend</p>
+                  <p className="text-[10px] text-violet-100 font-medium">Service channel share and daily revenue trend in {monthAnalytics.monthLabel}</p>
                 </div>
                 <div className="bg-white/5 dark:bg-zinc-900/20 p-6 space-y-5">
                   <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium leading-relaxed">
-                    <strong className="text-gray-700 dark:text-zinc-300">Service Channel Breakdown</strong> shows which products earn the most — use it to focus marketing. <strong className="text-gray-700 dark:text-zinc-300">Daily Revenue Trend</strong> shows how income flows across the month.
+                    <strong className="text-gray-700 dark:text-zinc-300">Service Channel Breakdown</strong> shows which products earn the most in {monthAnalytics.monthLabel} — use it to focus marketing. <strong className="text-gray-700 dark:text-zinc-300">Daily Revenue Trend</strong> shows how income flows across the month.
                   </p>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="h-64">
                       {monthAnalytics.serviceChannels.length === 0 ? (
-                        <div className="h-full flex items-center justify-center text-center text-[11px] text-gray-400 dark:text-zinc-500">No revenue recorded this month.</div>
+                        <div className="h-full flex items-center justify-center text-center text-[11px] text-gray-400 dark:text-zinc-500">No revenue recorded in {monthAnalytics.monthLabel}.</div>
                       ) : (
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
@@ -3848,7 +4267,7 @@ export default function AdminDashboard({
                     </div>
                     <div className="h-64">
                       {monthAnalytics.daily.length === 0 ? (
-                        <div className="h-full flex items-center justify-center text-center text-[11px] text-gray-400 dark:text-zinc-500">No daily revenue yet.</div>
+                        <div className="h-full flex items-center justify-center text-center text-[11px] text-gray-400 dark:text-zinc-500">No daily revenue recorded in {monthAnalytics.monthLabel}.</div>
                       ) : (
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={monthAnalytics.daily}>
@@ -3872,17 +4291,20 @@ export default function AdminDashboard({
 
             {/* Category Streams */}
             <div className="space-y-4">
-              <h3 className="font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-1">CATEGORY SALES</h3>
+              <div className="flex justify-between items-center border-b border-white/5 pb-1">
+                <h3 className="font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest">CATEGORY SALES ({monthAnalytics.monthLabel})</h3>
+                <span className="text-[10px] font-mono text-gray-400">{selectedReportMonth}</span>
+              </div>
               
               <div className="space-y-3">
                 {[
-                  { name: "Photocopy Service", value: salesReportData.photocopy },
-                  { name: "Digital Color Printing", value: salesReportData.printing },
-                  { name: "Custom Framing & Glass", value: salesReportData.frames },
-                  { name: "T-Shirt & Apparel Prints", value: salesReportData.tshirts },
-                  { name: "Wide Format Flex/Banners", value: salesReportData.largeFormat },
-                  { name: "DTF Custom Films", value: salesReportData.dtf },
-                  { name: "Specialized Restoration Services", value: salesReportData.special }
+                  { name: "Photocopy Service", value: monthAnalytics.categorySales.photocopy },
+                  { name: "Digital Color Printing", value: monthAnalytics.categorySales.printing },
+                  { name: "Custom Framing & Glass", value: monthAnalytics.categorySales.frames },
+                  { name: "T-Shirt & Apparel Prints", value: monthAnalytics.categorySales.tshirts },
+                  { name: "Wide Format Flex/Banners", value: monthAnalytics.categorySales.largeFormat },
+                  { name: "DTF Custom Films", value: monthAnalytics.categorySales.dtf },
+                  { name: "Specialized Restoration Services", value: monthAnalytics.categorySales.special }
                 ].map((channel) => (
                   <div key={channel.name} className="flex justify-between items-center text-sm font-semibold text-gray-700 dark:text-zinc-300 hover:translate-x-1 transition-transform">
                     <span>{channel.name}</span>
@@ -3894,7 +4316,7 @@ export default function AdminDashboard({
                 <div className="flex justify-between items-center text-base font-black text-gray-900 dark:text-white bg-gradient-to-r from-blue-500/10 to-orange-500/10 dark:from-blue-950/20 dark:to-orange-950/20 p-4 rounded-xl border border-white/5">
                   <span>Gross Sales Total:</span>
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-orange-500 dark:from-blue-400 dark:to-orange-400 font-extrabold text-lg">
-                    {currency} {salesReportData.totalSales.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    {currency} {monthAnalytics.categorySales.totalSales.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
@@ -3902,24 +4324,27 @@ export default function AdminDashboard({
 
             {/* Performance KPIs */}
             <div className="space-y-4">
-              <h3 className="font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-1">BUSINESS AUDIT SUMMARY</h3>
+              <div className="flex justify-between items-center border-b border-white/5 pb-1">
+                <h3 className="font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest">BUSINESS AUDIT SUMMARY ({monthAnalytics.monthLabel})</h3>
+                <span className="text-[10px] font-mono text-gray-400">{selectedReportMonth}</span>
+              </div>
               
               <div className="space-y-4 pt-1">
                 <div className="rounded-xl border border-white/5 p-4 bg-slate-500/5 dark:bg-zinc-950/40 grid grid-cols-2 gap-4">
                   <div>
                     <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-bold block uppercase tracking-wider">Client Balance Pool</span>
-                    <span className="text-base font-black text-rose-500 mt-0.5 block">{currency} {kpi.outstandingBalances.toFixed(2)}</span>
+                    <span className="text-base font-black text-rose-500 mt-0.5 block">{currency} {monthAnalytics.outstanding.toFixed(2)}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-bold block uppercase tracking-wider">Monthly Rent + Utility</span>
-                    <span className="text-base font-black text-gray-800 dark:text-white mt-0.5 block">{currency} {kpi.monthlyExpenses.toFixed(2)}</span>
+                    <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-bold block uppercase tracking-wider">Monthly Expenditures</span>
+                    <span className="text-base font-black text-gray-800 dark:text-white mt-0.5 block">{currency} {monthAnalytics.expenses.toFixed(2)}</span>
                   </div>
                 </div>
 
-                  <div className="space-y-2.5">
-                  <h4 className="font-black text-gray-800 dark:text-white uppercase tracking-wider text-[10px]">Star Personnel Analytics</h4>
+                <div className="space-y-2.5">
+                  <h4 className="font-black text-gray-800 dark:text-white uppercase tracking-wider text-[10px]">Star Personnel Analytics ({monthAnalytics.monthLabel})</h4>
                   {monthAnalytics.staffPerformance.length === 0 ? (
-                    <p className="text-[10px] text-gray-400 dark:text-zinc-500">No staff performance data yet this month.</p>
+                    <p className="text-[10px] text-gray-400 dark:text-zinc-500">No staff performance data in {monthAnalytics.monthLabel}.</p>
                   ) : monthAnalytics.staffPerformance
                     .slice()
                     .sort((a, b) => b.jobs - a.jobs)
@@ -3933,7 +4358,11 @@ export default function AdminDashboard({
 
                 <div className="p-4 bg-emerald-500/10 border border-emerald-500/15 rounded-xl text-emerald-800 dark:text-emerald-400 flex items-center gap-2.5 font-bold leading-relaxed shadow-sm">
                   <UserCheck className="h-5 w-5 shrink-0 text-emerald-500" />
-                  <span>Your company is operating at a {((kpi.netProfit / (kpi.grossRevenue || 1)) * 100).toFixed(0)}% net cash surplus margin this month!</span>
+                  <span>
+                    {monthAnalytics.revenue > 0
+                      ? `Your company is operating at a ${((monthAnalytics.profit / monthAnalytics.revenue) * 100).toFixed(0)}% net cash surplus margin in ${monthAnalytics.monthLabel}!`
+                      : `No revenue recorded in ${monthAnalytics.monthLabel}.`}
+                  </span>
                 </div>
               </div>
             </div>
