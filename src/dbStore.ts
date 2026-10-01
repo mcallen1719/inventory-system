@@ -32,10 +32,13 @@ let socket: any = null;
 let socketReady = false;
 const SOCKET_KEYS = [
   "printing_db_jobs",
+  "printing_db_gpo",
   "printing_db_general_orders",
   "printing_db_inventory",
   "printing_db_expenditures",
+  "printing_db_miscellaneous",
   "printing_db_daily_misc",
+  "printing_db_sales_reports",
   "printing_db_daily_sales",
   "printing_db_audit_logs",
   "printing_db_notifications",
@@ -65,13 +68,6 @@ function getSyncServerUrl(): string {
       return runtime.backendUrl.trim();
     }
   } catch { /* ignore */ }
-  try {
-    const { protocol, hostname, port } = window.location;
-    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
-    if (isLocal && port && port !== "3001") {
-      return `${protocol}//${hostname}:3001`;
-    }
-  } catch { /* ignore */ }
   return window.location.origin;
 }
 
@@ -81,6 +77,7 @@ function initSocketSync() {
   if (!url) return;
   try {
     socket = io(url, {
+      path: "/socket.io",
       transports: ["websocket", "polling"],
       reconnectionAttempts: 20,
       reconnectionDelay: 1000,
@@ -90,6 +87,7 @@ function initSocketSync() {
     socket.on("connect", () => {
       console.log("[Sync] Socket connected:", socket?.id);
       socketReady = true;
+      socket.emit("db_request_all");
     });
 
     socket.on("disconnect", () => {
@@ -97,42 +95,53 @@ function initSocketSync() {
       socketReady = false;
     });
 
-    socket.on("connect_error", (err) => {
+    socket.on("connect_error", (err: any) => {
       console.error("[Sync] Socket connection error:", err.message);
       socketReady = false;
     });
 
-    socket.on("db_full_sync", (payload) => {
+    socket.on("db_full_sync", (payload: any) => {
       console.log("[Sync] Full sync received, keys:", payload && Object.keys(payload).length);
       if (!payload || typeof payload !== "object") return;
       let updated = false;
-      for (const key in payload) {
-        if (key.startsWith("__v_")) continue;
-        const data = payload[key];
+      for (const rawKey in payload) {
+        if (rawKey.startsWith("__v_")) continue;
+        const data = payload[rawKey];
         if (data === undefined || data === null) continue;
-        const existing = localStorage.getItem(key);
-        if (Array.isArray(data) && data.length === 0 && existing) {
-          try {
-            const existingData = JSON.parse(existing);
-            if (Array.isArray(existingData) && existingData.length > 0) continue;
-          } catch { /* ignore */ }
+        
+        const key = (rawKey === "printing_db_general_orders") ? KEYS.GPO :
+                    (rawKey === "printing_db_daily_misc") ? KEYS.MISCELLANEOUS :
+                    (rawKey === "printing_db_daily_sales") ? KEYS.SALES_REPORTS : rawKey;
+
+        const localRaw = localStorage.getItem(key);
+        const remoteRaw = JSON.stringify(data);
+        if (localRaw !== remoteRaw) {
+          localStorage.setItem(key, remoteRaw);
+          updated = true;
         }
-        localStorage.setItem(key, JSON.stringify(data));
-        updated = true;
       }
       if (updated) {
         const event = new CustomEvent("printopia-sync", { detail: { key: "printing_db_init" } });
         window.dispatchEvent(event);
       }
-     });
+    });
 
     socket.on("db_update", (payload: { key: string; data: any }) => {
-      const { key, data } = payload;
-      if (!key || !SOCKET_KEYS.includes(key)) return;
+      const { key: rawKey, data } = payload;
+      if (!rawKey || !SOCKET_KEYS.includes(rawKey)) return;
       if (data === undefined || data === null) return;
-      localStorage.setItem(key, JSON.stringify(data));
-      const event = new CustomEvent("printopia-sync", { detail: { key } });
-      window.dispatchEvent(event);
+      
+      const key = (rawKey === "printing_db_general_orders") ? KEYS.GPO :
+                  (rawKey === "printing_db_daily_misc") ? KEYS.MISCELLANEOUS :
+                  (rawKey === "printing_db_daily_sales") ? KEYS.SALES_REPORTS : rawKey;
+
+      const localRaw = localStorage.getItem(key);
+      const remoteRaw = JSON.stringify(data);
+      if (localRaw !== remoteRaw) {
+        localStorage.setItem(key, remoteRaw);
+        const event = new CustomEvent("printopia-sync", { detail: { key } });
+        window.dispatchEvent(event);
+      }
     });
 
     socket.on("live_activity", (activity: any) => {
@@ -348,11 +357,14 @@ async function initSupabaseSync() {
     connectionStatus = "connected";
     let updated = false;
     for (const row of data) {
-      const localVersion = Number(localStorage.getItem(`__v_${row.key}`) || "0");
-      const remoteVersion = row.version || 0;
-      if (remoteVersion > localVersion || !localStorage.getItem(row.key)) {
-        localStorage.setItem(row.key, JSON.stringify(row.data));
-        if (remoteVersion) { try { localStorage.setItem(`__v_${row.key}`, String(remoteVersion)); } catch { /* ignore */ } }
+      const canonicalKey = (row.key === "printing_db_general_orders") ? KEYS.GPO :
+                           (row.key === "printing_db_daily_misc") ? KEYS.MISCELLANEOUS :
+                           (row.key === "printing_db_daily_sales") ? KEYS.SALES_REPORTS : row.key;
+      const localRaw = localStorage.getItem(canonicalKey);
+      const remoteRaw = JSON.stringify(row.data);
+      if (!localRaw || localRaw !== remoteRaw) {
+        localStorage.setItem(canonicalKey, remoteRaw);
+        if (row.version) { try { localStorage.setItem(`__v_${canonicalKey}`, String(row.version)); } catch { /* ignore */ } }
         updated = true;
       }
     }
@@ -406,12 +418,16 @@ function subscribeToSupabase() {
   supabaseChannel = supabase!.channel("app_state_changes")
     .on("postgres_changes", { event: "*", schema: "public", table: "app_state" }, (payload: any) => {
       if (payload.new && payload.new.key) {
-        const key = payload.new.key;
+        const rawKey = payload.new.key;
+        const key = (rawKey === "printing_db_general_orders") ? KEYS.GPO :
+                    (rawKey === "printing_db_daily_misc") ? KEYS.MISCELLANEOUS :
+                    (rawKey === "printing_db_daily_sales") ? KEYS.SALES_REPORTS : rawKey;
         const remoteVersion = payload.new.version || 0;
-        const localVersion = Number(localStorage.getItem(`__v_${key}`) || "0");
-        if (remoteVersion >= localVersion) {
-          localStorage.setItem(key, JSON.stringify(payload.new.data));
-          try { localStorage.setItem(`__v_${key}`, String(remoteVersion)); } catch { /* ignore */ }
+        const localRaw = localStorage.getItem(key);
+        const remoteRaw = JSON.stringify(payload.new.data);
+        if (localRaw !== remoteRaw) {
+          localStorage.setItem(key, remoteRaw);
+          if (remoteVersion) { try { localStorage.setItem(`__v_${key}`, String(remoteVersion)); } catch { /* ignore */ } }
           const event = new CustomEvent("printopia-sync", { detail: { key } });
           window.dispatchEvent(event);
         }
@@ -433,6 +449,23 @@ function subscribeToSupabase() {
 if (typeof window !== "undefined") {
   initSupabaseSync();
   subscribeToSupabase();
+
+  // Re-sync on window focus and tab visibility change so any device gets updates instantly
+  window.addEventListener("focus", () => {
+    initSupabaseSync();
+    if (socket && socketReady) {
+      socket.emit("db_request_all");
+    }
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      initSupabaseSync();
+      if (socket && socketReady) {
+        socket.emit("db_request_all");
+      }
+    }
+  });
 }
 
 export const DBStore = {
@@ -656,6 +689,16 @@ export const DBStore = {
     setStored(KEYS.MISCELLANEOUS, miscellaneous);
     this.addAuditLog(misc.staffName, "Create", "Daily Misc", `Logged local daily miscellaneous item GHS ${misc.amount.toFixed(2)}: ${misc.item}.`);
     return newMisc;
+  },
+
+  deleteDailyMiscellaneous(id: string, user: string) {
+    const miscellaneous = this.getDailyMiscellaneous();
+    const item = miscellaneous.find(m => m.id === id);
+    if (item) {
+      const filtered = miscellaneous.filter(m => m.id !== id);
+      setStored(KEYS.MISCELLANEOUS, filtered);
+      this.addAuditLog(user, "Delete", "Daily Misc", `Deleted staff minor expenditure of GHS ${item.amount.toFixed(2)}: ${item.item}.`);
+    }
   },
 
   getDailySalesReports(): DailySalesReport[] { return getStored<DailySalesReport[]>(KEYS.SALES_REPORTS, SEED_SALES_REPORTS); },

@@ -49,10 +49,13 @@ const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPAB
 
 const SYNC_KEYS = [
   'printing_db_jobs',
+  'printing_db_gpo',
   'printing_db_general_orders',
   'printing_db_inventory',
   'printing_db_expenditures',
+  'printing_db_miscellaneous',
   'printing_db_daily_misc',
+  'printing_db_sales_reports',
   'printing_db_daily_sales',
   'printing_db_audit_logs',
   'printing_db_notifications',
@@ -62,7 +65,8 @@ const SYNC_KEYS = [
   'printing_db_staff_attendance',
   'printing_db_deleted_jobs',
   'printing_db_live_activity',
-  'printing_db_reported_activities'
+  'printing_db_reported_activities',
+  'printing_db_admin_invoices'
 ];
 
 // In-memory cache backed by db.json
@@ -79,6 +83,31 @@ if (fs.existsSync(DB_FILE)) {
 const persist = () => {
   try { fs.writeFileSync(DB_FILE, JSON.stringify(dbCache, null, 2)); } catch (err) { console.error('db.json write failed', err); }
 };
+
+// Startup hydration from Supabase so local cache and cloud DB stay completely in sync
+async function hydrateFromSupabase() {
+  if (!supabase) return;
+  try {
+    const { data, error } = await supabase.from('app_state').select('key, data, version');
+    if (!error && Array.isArray(data)) {
+      data.forEach(row => {
+        if (row.key && row.data !== undefined) {
+          dbCache[row.key] = row.data;
+          dbCache['__v_' + row.key] = row.version || 0;
+          // Alias mappings
+          if (row.key === 'printing_db_gpo') dbCache['printing_db_general_orders'] = row.data;
+          if (row.key === 'printing_db_miscellaneous') dbCache['printing_db_daily_misc'] = row.data;
+          if (row.key === 'printing_db_sales_reports') dbCache['printing_db_daily_sales'] = row.data;
+        }
+      });
+      persist();
+      console.log(`[Supabase] Successfully hydrated dbCache with ${data.length} keys from Supabase cloud.`);
+    }
+  } catch (err) {
+    console.error('[Supabase] Startup hydration failed:', err);
+  }
+}
+hydrateFromSupabase();
 
 function getServerState() {
   const state = {};
@@ -111,10 +140,28 @@ io.on('connection', (socket) => {
     const { key, data } = payload;
     if (!key || !SYNC_KEYS.includes(key)) return;
     dbCache[key] = data;
+
+    // Maintain alias consistency
+    if (key === 'printing_db_gpo') dbCache['printing_db_general_orders'] = data;
+    if (key === 'printing_db_general_orders') dbCache['printing_db_gpo'] = data;
+    if (key === 'printing_db_miscellaneous') dbCache['printing_db_daily_misc'] = data;
+    if (key === 'printing_db_daily_misc') dbCache['printing_db_miscellaneous'] = data;
+    if (key === 'printing_db_sales_reports') dbCache['printing_db_daily_sales'] = data;
+    if (key === 'printing_db_daily_sales') dbCache['printing_db_sales_reports'] = data;
+
     persist();
-    const ok = await persistToSupabase(key, data);
-    if (ok) console.log(`Synced ${key} to Supabase`);
+
+    const canonicalKey = (key === 'printing_db_general_orders') ? 'printing_db_gpo' :
+                         (key === 'printing_db_daily_misc') ? 'printing_db_miscellaneous' :
+                         (key === 'printing_db_daily_sales') ? 'printing_db_sales_reports' : key;
+    
+    const ok = await persistToSupabase(canonicalKey, data);
+    if (ok) console.log(`Synced ${canonicalKey} to Supabase`);
+
     socket.broadcast.emit('db_update', { key, data });
+    if (canonicalKey !== key) {
+      socket.broadcast.emit('db_update', { key: canonicalKey, data });
+    }
   });
 
   socket.on('db_request_all', () => {

@@ -1189,16 +1189,36 @@ export default function AdminDashboard({
       
       const win = window.open("", "_blank");
       if (win) {
-        // Construct printable report HTML
-        const totalS = salesReportData.totalSales || 1;
+        // Construct printable report HTML — all data filtered to selected month
+        // Filter all data to the currently selected report month
+        const printMonth = selectedReportMonth;
+        const printMonthOrders = orders.filter(o => o.date.startsWith(printMonth));
+        const printMonthJobs = jobs.filter(j => j.date.startsWith(printMonth));
+        const printMonthExpenditures = expenditures.filter(e => e.date.startsWith(printMonth));
+        const printMonthMiscs = miscs.filter(m => m.date.startsWith(printMonth));
+        const printMonthRevenue = printMonthOrders.reduce((s, o) => s + o.grandTotal, 0) + printMonthJobs.reduce((s, j) => s + j.depositPaid, 0);
+        const printMonthExpenses = printMonthExpenditures.reduce((s, e) => s + e.amount, 0) + printMonthMiscs.reduce((s, m) => s + m.amount, 0);
+        const printMonthProfit = printMonthRevenue - printMonthExpenses;
+        const printMonthLabel = formatMonthLabel(printMonth);
+
+        const pmPhotocopy = printMonthOrders.reduce((s, o) => s + (o.photocopy?.amount || 0), 0);
+        const pmPrinting = printMonthOrders.reduce((s, o) => s + (o.printing?.amount || 0), 0);
+        const pmFrames = printMonthOrders.reduce((s, o) => s + (o.frame?.amount || 0), 0);
+        const pmTshirts = printMonthOrders.reduce((s, o) => s + (o.tshirt?.amount || 0), 0);
+        const pmLargeFormat = printMonthOrders.reduce((s, o) => s + (o.largeFormat?.sticker?.amount || 0) + (o.largeFormat?.banner?.amount || 0), 0);
+        const pmDtf = printMonthOrders.reduce((s, o) => s + (o.dtf?.a3?.amount || 0) + (o.dtf?.a4?.amount || 0), 0);
+        const pmSpecial = printMonthOrders.reduce((s, o) => s + (o.specialServices || []).reduce((a: number, b: any) => a + (b.amount || 0), 0), 0);
+        const pmJobDeposits = printMonthJobs.reduce((s, j) => s + j.depositPaid, 0);
+        const totalS = printMonthRevenue || 1;
         const channelsHTML = [
-          { name: "Photocopy Service", value: salesReportData.photocopy },
-          { name: "Digital Color Printing", value: salesReportData.printing },
-          { name: "Custom Framing & Glass", value: salesReportData.frames },
-          { name: "T-Shirt & Apparel Prints", value: salesReportData.tshirts },
-          { name: "Wide Format Flex/Banners", value: salesReportData.largeFormat },
-          { name: "Direct-to-Film (DTF) Sheets", value: salesReportData.dtf },
-          { name: "Specialized Services", value: salesReportData.special }
+          { name: "Photocopy Service", value: pmPhotocopy },
+          { name: "Digital Color Printing", value: pmPrinting },
+          { name: "Custom Framing & Glass", value: pmFrames },
+          { name: "T-Shirt & Apparel Prints", value: pmTshirts },
+          { name: "Wide Format Flex/Banners", value: pmLargeFormat },
+          { name: "Direct-to-Film (DTF) Sheets", value: pmDtf },
+          { name: "Specialized Services", value: pmSpecial },
+          { name: "Contract Job Deposits", value: pmJobDeposits }
         ].map(ch => {
           const pct = ((ch.value / totalS) * 100).toFixed(1) + "%";
           return `
@@ -1210,7 +1230,8 @@ export default function AdminDashboard({
           `;
         }).join("");
 
-        const ordersHTML = orders.slice(0, 15).map(o => `
+
+        const ordersHTML = printMonthOrders.map(o => `
           <tr>
             <td style="padding: 6px 8px; border-bottom: 1px solid #eee; font-family: monospace;">${o.orderNumber}</td>
             <td style="padding: 6px 8px; border-bottom: 1px solid #eee;">${o.date}</td>
@@ -1220,7 +1241,7 @@ export default function AdminDashboard({
           </tr>
         `).join("");
 
-        const jobsHTML = jobs.slice(0, 15).map(j => `
+        const jobsHTML = printMonthJobs.map(j => `
           <tr>
             <td style="padding: 6px 8px; border-bottom: 1px solid #eee; font-family: monospace;">${j.jobNumber}</td>
             <td style="padding: 6px 8px; border-bottom: 1px solid #eee; font-weight: 500;">${j.customerName}</td>
@@ -1231,12 +1252,18 @@ export default function AdminDashboard({
           </tr>
         `).join("");
 
-        const expendituresHTML = expenditures.slice(0, 15).map(e => `
+        // Combined expenditures: admin expenditures + staff misc — both filtered to selected month
+        const printAllExpenses = [
+          ...printMonthExpenditures.map(e => ({ date: e.date, item: e.item, category: e.category, note: e.supplier, amount: e.amount })),
+          ...printMonthMiscs.map(m => ({ date: m.date, item: m.item, category: "Miscellaneous", note: m.description || "—", amount: m.amount }))
+        ].sort((a, b) => b.date.localeCompare(a.date));
+
+        const expendituresHTML = printAllExpenses.map(e => `
           <tr>
             <td style="padding: 6px 8px; border-bottom: 1px solid #eee;">${e.date}</td>
             <td style="padding: 6px 8px; border-bottom: 1px solid #eee; font-weight: 500;">${e.item}</td>
             <td style="padding: 6px 8px; border-bottom: 1px solid #eee; font-size: 11px;">${e.category}</td>
-            <td style="padding: 6px 8px; border-bottom: 1px solid #eee;">${e.supplier}</td>
+            <td style="padding: 6px 8px; border-bottom: 1px solid #eee;">${e.note}</td>
             <td style="padding: 6px 8px; border-bottom: 1px solid #eee; text-align: right; font-weight: 600; color: #c2410c;">${currency} ${e.amount.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
           </tr>
         `).join("");
@@ -1373,9 +1400,9 @@ export default function AdminDashboard({
               </table>
 
               <div class="title-block">
-                <h1>Monthly Performance & Financial Ledger</h1>
+                <h1>Monthly Performance & Financial Ledger — ${printMonthLabel}</h1>
                 <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
-                  Report Window: Month-to-Date | Generated on: ${new Date().toLocaleString()} | Operator: Administrator Terminal
+                  Report Period: ${printMonthLabel} (${printMonth}) | Generated on: ${new Date().toLocaleString()} | Operator: Administrator Terminal
                 </div>
               </div>
 
@@ -1383,24 +1410,24 @@ export default function AdminDashboard({
               <div class="grid-kpi">
                 <div class="kpi-card">
                   <div class="kpi-label">Total Revenue</div>
-                  <div class="kpi-val">${currency} ${kpi.grossRevenue.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+                  <div class="kpi-val">${currency} ${printMonthRevenue.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
                 </div>
                 <div class="kpi-card">
-                  <div class="kpi-label">Expenditures</div>
-                  <div class="kpi-val" style="color: #c2410c;">${currency} ${kpi.totalExpenses.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+                  <div class="kpi-label">Expenditures (Admin + Misc)</div>
+                  <div class="kpi-val" style="color: #c2410c;">${currency} ${printMonthExpenses.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
                 </div>
                 <div class="kpi-card" style="border-color: #bbf7d0; background-color: #f0fdf4;">
                   <div class="kpi-label" style="color: #166534;">Net Profit</div>
-                  <div class="kpi-val" style="color: #15803d;">${currency} ${kpi.netProfit.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+                  <div class="kpi-val" style="color: #15803d;">${currency} ${printMonthProfit.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
                 </div>
                 <div class="kpi-card">
-                  <div class="kpi-label">Active Orders</div>
-                  <div class="kpi-val">${orders.length + jobs.length} Items</div>
+                  <div class="kpi-label">Orders & Jobs</div>
+                  <div class="kpi-val">${printMonthOrders.length + printMonthJobs.length} Items</div>
                 </div>
               </div>
 
               <!-- Revenue Breakdown -->
-              <div class="section-title">Revenue Stream Performance</div>
+              <div class="section-title">Revenue Stream Performance — ${printMonthLabel}</div>
               <table>
                 <thead>
                   <tr>
@@ -1412,8 +1439,8 @@ export default function AdminDashboard({
                 <tbody>
                   ${channelsHTML}
                   <tr style="background: #f8fafc; font-weight: 700; font-size: 12px; border-top: 2px solid #cbd5e1;">
-                    <td style="padding: 10px 8px;">Consolidated Total sales</td>
-                    <td style="padding: 10px 8px; text-align: right; color: #1e3a8a;">${currency} ${salesReportData.totalSales.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td style="padding: 10px 8px;">Consolidated Total</td>
+                    <td style="padding: 10px 8px; text-align: right; color: #1e3a8a;">${currency} ${printMonthRevenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                     <td style="padding: 10px 8px; text-align: right;">100.0%</td>
                   </tr>
                 </tbody>
@@ -1497,7 +1524,7 @@ export default function AdminDashboard({
     const curLabel = formatMonthLabel(targetMonth);
     const prevLabel = formatMonthLabel(targetPrevMonth);
 
-    DBStore.addAuditLog("Admin", "Export", "Monthly Report", `Downloaded comprehensive monthly business report as PDF for ${targetMonth} (compared with ${targetPrevMonth}).`);
+    DBStore.addAuditLog("Admin", "Export", "Monthly Report", `Downloaded comprehensive monthly business report as PDF for ${targetMonth}.`);
     
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -1580,42 +1607,40 @@ export default function AdminDashboard({
     doc.text(settings.companyName || "PRINTOPIA DIGITAL PRESS", margin, 15);
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text("Monthly Business Performance & Comparison Report", margin, 22);
+    doc.text(`Monthly Business Performance Report — ${curLabel}`, margin, 22);
     doc.setFontSize(8);
-    doc.text(`Report Period: ${curLabel} (${targetMonth}) | Previous Month: ${prevLabel} (${targetPrevMonth}) | Generated: ${new Date().toLocaleString()}`, margin, 29);
+    doc.text(`Report Period: ${curLabel} (${targetMonth}) | Generated: ${new Date().toLocaleString()}`, margin, 29);
     doc.setTextColor(0, 0, 0);
     yPos = 42;
 
-    // Financial Summary Section with MoM Comparison
-    addSectionHeader("Financial Summary & MoM Comparison", [30, 58, 138]);
-    addNote(`Overall financial health for ${curLabel} compared side-by-side with ${prevLabel}. Revenue includes order totals + deposits. Expenses include admin expenditures + misc spends.`);
+    // Financial Summary Section
+    addSectionHeader(`Financial Summary — ${curLabel}`, [30, 58, 138]);
+    addNote(`Overall financial health for ${curLabel}. Revenue includes all order totals + job deposits. Expenses combine admin expenditures + staff miscellaneous spends.`);
     
     const kpiData = [
-      ["Total Revenue", `${currency} ${monthRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, `${currency} ${prevRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, calcMomPill(monthRevenue, prevRevenue, false, true), "General orders + job deposits"],
-      ["Total Expenditures", `${currency} ${monthExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, `${currency} ${prevExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, calcMomPill(monthExpenses, prevExpenses, false, true), "Admin expenditures + staff miscellaneous"],
-      ["Net Profit / Loss", `${currency} ${monthProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, `${currency} ${prevProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, calcMomPill(monthProfit, prevProfit, false, true), "Revenue minus all expenses"],
-      ["Outstanding Balances", `${currency} ${monthOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, `${currency} ${prevOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, calcMomPill(monthOutstanding, prevOutstanding, false, true), "Money owed by clients for open jobs"],
-      ["Jobs Created", `${monthJobs.length}`, `${prevJobs.length}`, `${monthJobs.length - prevJobs.length >= 0 ? "+" : ""}${monthJobs.length - prevJobs.length} jobs`, "Custom contract jobs created"],
-      ["General Orders", `${monthOrders.length}`, `${prevOrders.length}`, `${monthOrders.length - prevOrders.length >= 0 ? "+" : ""}${monthOrders.length - prevOrders.length} orders`, "Over-the-counter print orders"],
-      ["Late Arrivals", `${monthLateNotes.length}`, `${prevLateNotes.length}`, `${monthLateNotes.length - prevLateNotes.length >= 0 ? "+" : ""}${monthLateNotes.length - prevLateNotes.length} incidents`, "Documented staff late arrivals"],
-      ["Attendance Sessions", `${monthAttendance.length}`, `${prevAttendance.length}`, `${monthAttendance.length - prevAttendance.length >= 0 ? "+" : ""}${monthAttendance.length - prevAttendance.length} sessions`, "Clock-in records captured"],
-      ["Job Completion Rate", `${completionRate.toFixed(1)}%`, `${prevCompletionRate.toFixed(1)}%`, `${completionRate - prevCompletionRate >= 0 ? "+" : ""}${(completionRate - prevCompletionRate).toFixed(1)}%`, "Jobs marked Ready / Delivered"],
+      ["Total Revenue", `${currency} ${monthRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, "General orders + job deposits"],
+      ["Total Expenditures", `${currency} ${monthExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, "Admin expenditures + staff miscellaneous"],
+      ["Net Profit / Loss", `${currency} ${monthProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, "Revenue minus all expenses"],
+      ["Outstanding Balances", `${currency} ${monthOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, "Money owed by clients for open jobs"],
+      ["Jobs Created", `${monthJobs.length}`, "Custom contract jobs created"],
+      ["General Orders", `${monthOrders.length}`, "Over-the-counter print orders"],
+      ["Late Arrivals", `${monthLateNotes.length}`, "Documented staff late arrivals"],
+      ["Attendance Sessions", `${monthAttendance.length}`, "Clock-in records captured"],
+      ["Job Completion Rate", `${completionRate.toFixed(1)}%`, "Jobs marked Ready / Delivered"],
     ];
 
     (autoTable as any)(doc, {
       startY: yPos,
-      head: [["Metric", `Current (${curLabel})`, `Previous (${prevLabel})`, "MoM Change", "Explanation"]],
+      head: [["Metric", `Value (${curLabel})`, "Explanation"]],
       body: kpiData,
       theme: "grid",
       headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8 },
       bodyStyles: { fontSize: 8, textColor: [40, 40, 40] },
       alternateRowStyles: { fillColor: [245, 247, 250] },
       columnStyles: {
-        0: { cellWidth: 42, fontStyle: "bold" },
-        1: { cellWidth: 32, halign: "right", fontStyle: "bold", textColor: [20, 30, 80] },
-        2: { cellWidth: 32, halign: "right" },
-        3: { cellWidth: 34, halign: "center", fontStyle: "bold", textColor: [16, 120, 80] },
-        4: { cellWidth: 40 }
+        0: { cellWidth: 50, fontStyle: "bold" },
+        1: { cellWidth: 60, halign: "right", fontStyle: "bold", textColor: [20, 30, 80] },
+        2: { cellWidth: 70 }
       },
       margin: { left: margin, right: margin }
     });
@@ -2112,7 +2137,7 @@ export default function AdminDashboard({
     doc.setFontSize(8);
     doc.setTextColor(100, 100, 100);
     doc.text("This report was generated by Printopia Digital Press Management System.", margin, yPos + 6);
-    doc.text(`Period: ${curLabel} | Comparing against: ${prevLabel}. All figures from real-time records.`, margin, yPos + 10);
+    doc.text(`Period: ${curLabel} (${targetMonth}). All figures sourced from real-time centralised records.`, margin, yPos + 10);
     doc.text("CONFIDENTIAL — For internal business review only.", pageWidth - margin, yPos + 10, { align: "right" });
 
     doc.save(`Printopia_Monthly_Business_Report_${targetMonth}.pdf`);
@@ -3605,16 +3630,13 @@ export default function AdminDashboard({
                 </span>
               </div>
               <p className="text-xs text-gray-400 dark:text-zinc-500 font-medium mt-0.5">
-                Aggregated revenue channels, cost audits, and Month-over-Month comparison vs <strong className="text-gray-700 dark:text-zinc-300">{prevMonthAnalytics.monthLabel}</strong>
+                Aggregated revenue channels, expenditures, and performance for the selected month
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <button onClick={() => handleDownloadMonthlyReport(selectedReportMonth)} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-black py-2 px-3.5 rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95">
                 <Download className="h-3.5 w-3.5" /> Download Report (PDF)
-              </button>
-              <button onClick={() => handleExport("pdf")} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-black py-2 px-3.5 rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95">
-                <Download className="h-3.5 w-3.5" /> Print Summary
               </button>
               <button onClick={() => handleExport("excel")} className="inline-flex items-center gap-1 border border-white/10 dark:border-zinc-800 text-gray-700 dark:text-zinc-300 font-bold py-2 px-3 rounded-xl text-xs transition-all cursor-pointer bg-white/10 dark:bg-zinc-900/40 hover:bg-white/20 backdrop-blur-md">
                 <Download className="h-3.5 w-3.5" /> Full Ledger
@@ -3675,13 +3697,9 @@ export default function AdminDashboard({
             </div>
 
             <div className="flex items-center gap-2 text-[11px] font-bold">
-              <span className="text-gray-500 dark:text-zinc-400">Comparing:</span>
+              <span className="text-gray-500 dark:text-zinc-400">Showing data for:</span>
               <span className="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 font-black font-mono">
                 {monthAnalytics.monthLabel}
-              </span>
-              <span className="text-gray-400">vs</span>
-              <span className="px-2 py-1 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20 font-black font-mono">
-                {prevMonthAnalytics.monthLabel} (Previous)
               </span>
             </div>
           </div>
@@ -3694,11 +3712,11 @@ export default function AdminDashboard({
                   <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
                     <FileText className="h-4 w-4" /> Executive Summary — {monthAnalytics.monthLabel}
                   </h3>
-                  <p className="text-[10px] text-blue-100 font-medium">Financial and operational breakdown with Month-over-Month comparison against {prevMonthAnalytics.monthLabel}</p>
+                  <p className="text-[10px] text-blue-100 font-medium">Financial and operational breakdown for {monthAnalytics.monthLabel}</p>
                 </div>
                 <div className="bg-white/5 dark:bg-zinc-900/20 px-6 py-3">
                   <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium leading-relaxed">
-                    This summary consolidates key performance indicators for <strong className="text-gray-700 dark:text-zinc-300">{monthAnalytics.monthLabel}</strong> compared directly with <strong className="text-gray-700 dark:text-zinc-300">{prevMonthAnalytics.monthLabel}</strong>. <strong className="text-gray-700 dark:text-zinc-300">Revenue</strong> includes all general order totals plus job deposits. <strong className="text-gray-700 dark:text-zinc-300">Expenses</strong> include admin expenditures and staff miscellaneous spends.
+                    This summary consolidates key performance indicators for <strong className="text-gray-700 dark:text-zinc-300">{monthAnalytics.monthLabel}</strong>. <strong className="text-gray-700 dark:text-zinc-300">Revenue</strong> includes all general order totals plus job deposits. <strong className="text-gray-700 dark:text-zinc-300">Expenses</strong> combine admin expenditures and staff miscellaneous spends.
                   </p>
                 </div>
                 <div className="bg-white/5 dark:bg-zinc-900/20">
@@ -3707,247 +3725,59 @@ export default function AdminDashboard({
                       {
                         label: "Total Revenue",
                         value: `${currency} ${monthAnalytics.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                        prevValue: `${currency} ${prevMonthAnalytics.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                        delta: momComparison.revenue,
-                        tone: "text-emerald-600 dark:text-emerald-400",
-                        isCurrency: true
+                        tone: "text-emerald-600 dark:text-emerald-400"
                       },
                       {
-                        label: "Total Expenses",
+                        label: "Total Expenditures (Admin + Misc)",
                         value: `${currency} ${monthAnalytics.expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                        prevValue: `${currency} ${prevMonthAnalytics.expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                        delta: momComparison.expenses,
-                        tone: "text-rose-600 dark:text-rose-400",
-                        isExpense: true,
-                        isCurrency: true
+                        tone: "text-rose-600 dark:text-rose-400"
                       },
                       {
                         label: "Net Profit / Loss",
                         value: `${currency} ${monthAnalytics.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                        prevValue: `${currency} ${prevMonthAnalytics.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                        delta: momComparison.profit,
-                        tone: monthAnalytics.profit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
-                        isCurrency: true
+                        tone: monthAnalytics.profit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
                       },
                       {
                         label: "Total Jobs Created",
                         value: `${monthAnalytics.monthJobs.length} jobs`,
-                        prevValue: `${prevMonthAnalytics.monthJobs.length} jobs`,
-                        delta: momComparison.jobs,
                         tone: "text-gray-900 dark:text-white"
                       },
                       {
                         label: "Total General Orders",
                         value: `${monthAnalytics.monthOrders.length} orders`,
-                        prevValue: `${prevMonthAnalytics.monthOrders.length} orders`,
-                        delta: momComparison.orders,
                         tone: "text-gray-900 dark:text-white"
                       },
                       {
                         label: "Outstanding Balances",
                         value: `${currency} ${monthAnalytics.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                        prevValue: `${currency} ${prevMonthAnalytics.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                        delta: momComparison.outstanding,
-                        tone: "text-amber-600 dark:text-amber-400",
-                        isCurrency: true
+                        tone: "text-amber-600 dark:text-amber-400"
                       },
                       {
                         label: "Late Arrivals",
                         value: `${monthAnalytics.totalLate} incidents`,
-                        prevValue: `${prevMonthAnalytics.totalLate} incidents`,
-                        delta: momComparison.lateArrivals,
                         tone: "text-amber-600 dark:text-amber-400"
                       },
                       {
                         label: "Attendance Sessions",
                         value: `${monthAnalytics.totalSessions} sessions`,
-                        prevValue: `${prevMonthAnalytics.totalSessions} sessions`,
-                        delta: momComparison.sessions,
                         tone: "text-indigo-600 dark:text-indigo-400"
                       },
                       {
                         label: "Job Completion Rate",
                         value: `${monthAnalytics.completionRate.toFixed(1)}%`,
-                        prevValue: `${prevMonthAnalytics.completionRate.toFixed(1)}%`,
-                        delta: momComparison.completionRate,
                         tone: "text-blue-600 dark:text-blue-400"
                       },
                     ].map((card, i) => (
                       <div key={i} className="bg-white/5 dark:bg-zinc-900/20 p-4 flex flex-col justify-between">
-                        <div>
-                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-zinc-500">{card.label}</span>
-                          <span className={`text-base font-black mt-1 block ${card.tone}`}>{card.value}</span>
-                        </div>
-                        <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-[9px] font-bold">
-                          <span className="text-gray-400 dark:text-zinc-500 font-mono">Prev: {card.prevValue}</span>
-                          <span className={`px-1.5 py-0.5 rounded font-black flex items-center gap-0.5 ${
-                            card.delta.diff > 0 
-                              ? card.isExpense ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                              : card.delta.diff < 0
-                              ? card.isExpense ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
-                              : "bg-gray-500/10 text-gray-500 dark:text-zinc-400"
-                          }`}>
-                            {card.delta.diff > 0 ? <ArrowUpRight className="h-2.5 w-2.5" /> : card.delta.diff < 0 ? <ArrowDownRight className="h-2.5 w-2.5" /> : null}
-                            {card.delta.diff > 0 ? "+" : ""}{card.delta.pct.toFixed(0)}%
-                          </span>
-                        </div>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-zinc-500">{card.label}</span>
+                        <span className={`text-base font-black mt-1 block ${card.tone}`}>{card.value}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
 
-              {/* ===== MONTH-OVER-MONTH (MoM) COMPARISON TABLE ===== */}
-              <div className="rounded-2xl border border-white/10 overflow-hidden shadow-lg">
-                <div className="bg-gradient-to-r from-purple-700 via-indigo-700 to-blue-700 px-6 py-3 flex justify-between items-center">
-                  <div>
-                    <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4" /> Month-over-Month (MoM) Comparison
-                    </h3>
-                    <p className="text-[10px] text-blue-100 font-medium">
-                      Comparing {monthAnalytics.monthLabel} directly against {prevMonthAnalytics.monthLabel}
-                    </p>
-                  </div>
-                  <span className="text-[10px] font-mono font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-white/20 text-white backdrop-blur-md">
-                    {monthAnalytics.month} vs {prevMonthAnalytics.month}
-                  </span>
-                </div>
-                <div className="bg-white/5 dark:bg-zinc-900/20 overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-gradient-to-r from-purple-500/10 to-indigo-500/10 dark:from-purple-950/30 dark:to-indigo-950/30 text-purple-900 dark:text-purple-200 font-black uppercase tracking-wider text-[10px] border-b border-white/10">
-                        <th className="py-3 px-4">Performance Metric</th>
-                        <th className="py-3 px-4 text-right">{monthAnalytics.monthLabel} (Selected)</th>
-                        <th className="py-3 px-4 text-right">{prevMonthAnalytics.monthLabel} (Previous)</th>
-                        <th className="py-3 px-4 text-right">Net Difference</th>
-                        <th className="py-3 px-4 text-right">MoM Growth</th>
-                        <th className="py-3 px-4 text-center">Trend</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {[
-                        {
-                          name: "Gross Revenue (Orders + Deposits)",
-                          cur: `${currency} ${monthAnalytics.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          prev: `${currency} ${prevMonthAnalytics.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          diff: `${momComparison.revenue.diff >= 0 ? "+" : ""}${currency} ${momComparison.revenue.diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          pct: momComparison.revenue.pct,
-                          isPositive: momComparison.revenue.diff >= 0,
-                          isBetter: momComparison.revenue.diff >= 0
-                        },
-                        {
-                          name: "Total Expenditures (Admin + Misc)",
-                          cur: `${currency} ${monthAnalytics.expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          prev: `${currency} ${prevMonthAnalytics.expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          diff: `${momComparison.expenses.diff >= 0 ? "+" : ""}${currency} ${momComparison.expenses.diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          pct: momComparison.expenses.pct,
-                          isPositive: momComparison.expenses.diff >= 0,
-                          isBetter: momComparison.expenses.diff <= 0
-                        },
-                        {
-                          name: "Net Profit / Loss",
-                          cur: `${currency} ${monthAnalytics.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          prev: `${currency} ${prevMonthAnalytics.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          diff: `${momComparison.profit.diff >= 0 ? "+" : ""}${currency} ${momComparison.profit.diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          pct: momComparison.profit.pct,
-                          isPositive: momComparison.profit.diff >= 0,
-                          isBetter: momComparison.profit.diff >= 0
-                        },
-                        {
-                          name: "Contract Jobs Created",
-                          cur: `${monthAnalytics.monthJobs.length} jobs`,
-                          prev: `${prevMonthAnalytics.monthJobs.length} jobs`,
-                          diff: `${momComparison.jobs.diff >= 0 ? "+" : ""}${momComparison.jobs.diff} jobs`,
-                          pct: momComparison.jobs.pct,
-                          isPositive: momComparison.jobs.diff >= 0,
-                          isBetter: momComparison.jobs.diff >= 0
-                        },
-                        {
-                          name: "General Printing Orders",
-                          cur: `${monthAnalytics.monthOrders.length} orders`,
-                          prev: `${prevMonthAnalytics.monthOrders.length} orders`,
-                          diff: `${momComparison.orders.diff >= 0 ? "+" : ""}${momComparison.orders.diff} orders`,
-                          pct: momComparison.orders.pct,
-                          isPositive: momComparison.orders.diff >= 0,
-                          isBetter: momComparison.orders.diff >= 0
-                        },
-                        {
-                          name: "Average Contract Job Value",
-                          cur: `${currency} ${monthAnalytics.avgJobValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          prev: `${currency} ${prevMonthAnalytics.avgJobValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          diff: `${momComparison.avgJobValue.diff >= 0 ? "+" : ""}${currency} ${momComparison.avgJobValue.diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          pct: momComparison.avgJobValue.pct,
-                          isPositive: momComparison.avgJobValue.diff >= 0,
-                          isBetter: momComparison.avgJobValue.diff >= 0
-                        },
-                        {
-                          name: "Job Completion Rate",
-                          cur: `${monthAnalytics.completionRate.toFixed(1)}%`,
-                          prev: `${prevMonthAnalytics.completionRate.toFixed(1)}%`,
-                          diff: `${momComparison.completionRate.diff >= 0 ? "+" : ""}${(momComparison.completionRate.diff).toFixed(1)}%`,
-                          pct: momComparison.completionRate.pct,
-                          isPositive: momComparison.completionRate.diff >= 0,
-                          isBetter: momComparison.completionRate.diff >= 0
-                        },
-                        {
-                          name: "Outstanding Client Balances",
-                          cur: `${currency} ${monthAnalytics.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          prev: `${currency} ${prevMonthAnalytics.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          diff: `${momComparison.outstanding.diff >= 0 ? "+" : ""}${currency} ${momComparison.outstanding.diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                          pct: momComparison.outstanding.pct,
-                          isPositive: momComparison.outstanding.diff >= 0,
-                          isBetter: momComparison.outstanding.diff <= 0
-                        },
-                        {
-                          name: "Staff Late Arrival Incidents",
-                          cur: `${monthAnalytics.totalLate}`,
-                          prev: `${prevMonthAnalytics.totalLate}`,
-                          diff: `${momComparison.lateArrivals.diff >= 0 ? "+" : ""}${momComparison.lateArrivals.diff}`,
-                          pct: momComparison.lateArrivals.pct,
-                          isPositive: momComparison.lateArrivals.diff >= 0,
-                          isBetter: momComparison.lateArrivals.diff <= 0
-                        },
-                        {
-                          name: "Staff Attendance Sessions",
-                          cur: `${monthAnalytics.totalSessions}`,
-                          prev: `${prevMonthAnalytics.totalSessions}`,
-                          diff: `${momComparison.sessions.diff >= 0 ? "+" : ""}${momComparison.sessions.diff}`,
-                          pct: momComparison.sessions.pct,
-                          isPositive: momComparison.sessions.diff >= 0,
-                          isBetter: momComparison.sessions.diff >= 0
-                        }
-                      ].map((row, idx) => (
-                        <tr key={idx} className={`hover:bg-white/5 transition-colors ${idx % 2 === 0 ? "bg-white/2 dark:bg-white/1" : ""}`}>
-                          <td className="py-3 px-4 font-bold text-gray-800 dark:text-zinc-200">{row.name}</td>
-                          <td className="py-3 px-4 text-right font-black text-gray-900 dark:text-white">{row.cur}</td>
-                          <td className="py-3 px-4 text-right font-mono text-gray-500 dark:text-zinc-400">{row.prev}</td>
-                          <td className={`py-3 px-4 text-right font-bold ${row.isBetter ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                            {row.diff}
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black inline-block font-mono ${
-                              row.isBetter ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
-                            }`}>
-                              {row.isPositive ? "+" : ""}{row.pct.toFixed(1)}%
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            {row.isBetter ? (
-                              <span className="inline-flex items-center text-emerald-600 dark:text-emerald-400 font-bold text-[10px]">
-                                <ArrowUpRight className="h-3 w-3" /> Improved
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center text-rose-600 dark:text-rose-400 font-bold text-[10px]">
-                                <ArrowDownRight className="h-3 w-3" /> Decreased
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+
 
             {/* Monthly Job Breakdown */}
             <div className="rounded-2xl border border-white/10 overflow-hidden shadow-lg">
