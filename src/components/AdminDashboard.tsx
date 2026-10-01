@@ -621,9 +621,13 @@ export default function AdminDashboard({
     const monthExps = expenditures.filter(e => e.date.startsWith(targetMonth));
     const monthMiscs = miscs.filter(m => m.date.startsWith(targetMonth));
 
-    // Revenue = order totals + job deposits
-    const revenue = monthOrders.reduce((s, o) => s + o.grandTotal, 0) + monthJobs.reduce((s, j) => s + j.depositPaid, 0);
-    const expenses = monthExps.reduce((s, e) => s + e.amount, 0) + monthMiscs.reduce((s, m) => s + m.amount, 0);
+    // Revenue = order totals + job deposits (strictly for targetMonth only)
+    const ordersRevenue = monthOrders.reduce((s, o) => s + o.grandTotal, 0);
+    const jobsRevenue = monthJobs.reduce((s, j) => s + j.depositPaid, 0);
+    const revenue = ordersRevenue + jobsRevenue;
+    const adminExpenses = monthExps.reduce((s, e) => s + e.amount, 0);
+    const miscExpenses = monthMiscs.reduce((s, m) => s + m.amount, 0);
+    const expenses = adminExpenses + miscExpenses;
     const profit = revenue - expenses;
     const outstanding = monthJobs.reduce((s, j) => s + j.balance, 0);
 
@@ -771,7 +775,11 @@ export default function AdminDashboard({
       monthExps,
       monthMiscs,
       revenue,
+      ordersRevenue,
+      jobsRevenue,
       expenses,
+      adminExpenses,
+      miscExpenses,
       profit,
       outstanding,
       totalLate,
@@ -3723,54 +3731,64 @@ export default function AdminDashboard({
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-white/10">
                     {[
                       {
-                        label: "Total Revenue",
+                        label: `Total Revenue (${monthAnalytics.monthLabel} Only)`,
                         value: `${currency} ${monthAnalytics.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                        tone: "text-emerald-600 dark:text-emerald-400"
+                        tone: "text-emerald-600 dark:text-emerald-400",
+                        sub: `Orders: ${currency} ${monthAnalytics.ordersRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Job Deposits: ${currency} ${monthAnalytics.jobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
                       },
                       {
-                        label: "Total Expenditures (Admin + Misc)",
+                        label: `Total Expenses (${monthAnalytics.monthLabel} Only)`,
                         value: `${currency} ${monthAnalytics.expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                        tone: "text-rose-600 dark:text-rose-400"
+                        tone: "text-rose-600 dark:text-rose-400",
+                        sub: `Admin Purchases: ${currency} ${monthAnalytics.adminExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Misc: ${currency} ${monthAnalytics.miscExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
                       },
                       {
-                        label: "Net Profit / Loss",
+                        label: `Net Profit / Loss (${monthAnalytics.monthLabel})`,
                         value: `${currency} ${monthAnalytics.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                        tone: monthAnalytics.profit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+                        tone: monthAnalytics.profit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+                        sub: "Revenue minus all expenses for this month only"
                       },
                       {
-                        label: "Total Jobs Created",
-                        value: `${monthAnalytics.monthJobs.length} jobs`,
-                        tone: "text-gray-900 dark:text-white"
+                        label: `General Orders Revenue (${monthAnalytics.monthOrders.length} orders)`,
+                        value: `${currency} ${monthAnalytics.ordersRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                        tone: "text-blue-600 dark:text-blue-400",
+                        sub: `All counter orders placed in ${monthAnalytics.monthLabel}`
                       },
                       {
-                        label: "Total General Orders",
-                        value: `${monthAnalytics.monthOrders.length} orders`,
-                        tone: "text-gray-900 dark:text-white"
+                        label: `Custom Jobs Deposits (${monthAnalytics.monthJobs.length} jobs)`,
+                        value: `${currency} ${monthAnalytics.jobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                        tone: "text-purple-600 dark:text-purple-400",
+                        sub: `Deposits received on jobs in ${monthAnalytics.monthLabel}`
                       },
                       {
-                        label: "Outstanding Balances",
+                        label: "Outstanding Balances Owed",
                         value: `${currency} ${monthAnalytics.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                        tone: "text-amber-600 dark:text-amber-400"
-                      },
-                      {
-                        label: "Late Arrivals",
-                        value: `${monthAnalytics.totalLate} incidents`,
-                        tone: "text-amber-600 dark:text-amber-400"
-                      },
-                      {
-                        label: "Attendance Sessions",
-                        value: `${monthAnalytics.totalSessions} sessions`,
-                        tone: "text-indigo-600 dark:text-indigo-400"
+                        tone: "text-amber-600 dark:text-amber-400",
+                        sub: `Unpaid customer balance on ${monthAnalytics.monthLabel} jobs`
                       },
                       {
                         label: "Job Completion Rate",
                         value: `${monthAnalytics.completionRate.toFixed(1)}%`,
-                        tone: "text-blue-600 dark:text-blue-400"
+                        tone: "text-indigo-600 dark:text-indigo-400",
+                        sub: `${monthAnalytics.monthJobs.filter(j => j.status === 'Ready' || j.status === 'Delivered').length} of ${monthAnalytics.monthJobs.length} jobs ready/delivered`
+                      },
+                      {
+                        label: "Attendance Sessions",
+                        value: `${monthAnalytics.totalSessions} sessions`,
+                        tone: "text-gray-900 dark:text-white",
+                        sub: `Staff shift sessions in ${monthAnalytics.monthLabel}`
+                      },
+                      {
+                        label: "Late Arrivals",
+                        value: `${monthAnalytics.totalLate} incidents`,
+                        tone: monthAnalytics.totalLate > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400",
+                        sub: "Staff arrival incidents logged"
                       },
                     ].map((card, i) => (
                       <div key={i} className="bg-white/5 dark:bg-zinc-900/20 p-4 flex flex-col justify-between">
                         <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-zinc-500">{card.label}</span>
                         <span className={`text-base font-black mt-1 block ${card.tone}`}>{card.value}</span>
+                        {card.sub && <span className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1 block font-medium">{card.sub}</span>}
                       </div>
                     ))}
                   </div>
