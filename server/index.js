@@ -66,7 +66,8 @@ const SYNC_KEYS = [
   'printing_db_deleted_jobs',
   'printing_db_live_activity',
   'printing_db_reported_activities',
-  'printing_db_admin_invoices'
+  'printing_db_admin_invoices',
+  'printing_db_monthly_adjustments'
 ];
 
 // In-memory cache backed by db.json

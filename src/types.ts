@@ -386,5 +386,17 @@ export interface ReportedActivity {
   createdAt: string;
 }
 
-
-
+export interface MonthlyReportAdjustment {
+  month: string; // "YYYY-MM"
+  revenue?: number;
+  ordersRevenue?: number;
+  jobsRevenue?: number;
+  expenses?: number;
+  adminExpenses?: number;
+  miscExpenses?: number;
+  profit?: number;
+  outstanding?: number;
+  notes?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}

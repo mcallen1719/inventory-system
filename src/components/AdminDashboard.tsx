@@ -55,7 +55,7 @@ import {
   Cell
 } from "recharts";
 import { DBStore } from "../dbStore";
-import { CompanySettings, Expenditure, DailyMiscellaneous, InventoryItem, UserRole, StaffAccount, StaffNote, ReportedActivity } from "../types";
+import { CompanySettings, Expenditure, DailyMiscellaneous, InventoryItem, UserRole, StaffAccount, StaffNote, ReportedActivity, Job, MonthlyReportAdjustment } from "../types";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -622,15 +622,28 @@ export default function AdminDashboard({
     const monthExps = expenditures.filter(e => e.date.startsWith(targetMonth));
     const monthMiscs = miscs.filter(m => m.date.startsWith(targetMonth));
 
-    // Revenue = order totals + job deposits (strictly for targetMonth only)
-    const ordersRevenue = monthOrders.reduce((s, o) => s + o.grandTotal, 0);
-    const jobsRevenue = monthJobs.reduce((s, j) => s + j.depositPaid, 0);
-    const revenue = ordersRevenue + jobsRevenue;
-    const adminExpenses = monthExps.reduce((s, e) => s + e.amount, 0);
-    const miscExpenses = monthMiscs.reduce((s, m) => s + m.amount, 0);
-    const expenses = adminExpenses + miscExpenses;
-    const profit = revenue - expenses;
-    const outstanding = monthJobs.reduce((s, j) => s + j.balance, 0);
+    // Raw calculated values (strictly for targetMonth only)
+    const rawOrdersRevenue = monthOrders.reduce((s, o) => s + o.grandTotal, 0);
+    const rawJobsRevenue = monthJobs.reduce((s, j) => s + j.depositPaid, 0);
+    const rawRevenue = rawOrdersRevenue + rawJobsRevenue;
+    const rawAdminExpenses = monthExps.reduce((s, e) => s + e.amount, 0);
+    const rawMiscExpenses = monthMiscs.reduce((s, m) => s + m.amount, 0);
+    const rawExpenses = rawAdminExpenses + rawMiscExpenses;
+    const rawProfit = rawRevenue - rawExpenses;
+    const rawOutstanding = monthJobs.reduce((s, j) => s + j.balance, 0);
+
+    // Check for admin manual adjustment/override for this month
+    const adjustment = DBStore.getMonthlyReportAdjustment(targetMonth);
+    const isAdjusted = !!adjustment;
+
+    const ordersRevenue = (adjustment?.ordersRevenue !== undefined) ? adjustment.ordersRevenue : rawOrdersRevenue;
+    const jobsRevenue = (adjustment?.jobsRevenue !== undefined) ? adjustment.jobsRevenue : rawJobsRevenue;
+    const revenue = (adjustment?.revenue !== undefined) ? adjustment.revenue : (isAdjusted ? ordersRevenue + jobsRevenue : rawRevenue);
+    const adminExpenses = (adjustment?.adminExpenses !== undefined) ? adjustment.adminExpenses : rawAdminExpenses;
+    const miscExpenses = (adjustment?.miscExpenses !== undefined) ? adjustment.miscExpenses : rawMiscExpenses;
+    const expenses = (adjustment?.expenses !== undefined) ? adjustment.expenses : (isAdjusted ? adminExpenses + miscExpenses : rawExpenses);
+    const profit = (adjustment?.profit !== undefined) ? adjustment.profit : (revenue - expenses);
+    const outstanding = (adjustment?.outstanding !== undefined) ? adjustment.outstanding : rawOutstanding;
 
     // Staff attendance / late
     const staffAttendanceList = DBStore.getStaffAttendance();
@@ -783,6 +796,16 @@ export default function AdminDashboard({
       miscExpenses,
       profit,
       outstanding,
+      rawRevenue,
+      rawOrdersRevenue,
+      rawJobsRevenue,
+      rawExpenses,
+      rawAdminExpenses,
+      rawMiscExpenses,
+      rawProfit,
+      rawOutstanding,
+      isAdjusted,
+      adjustment,
       totalLate,
       totalSessions,
       daily,
@@ -952,6 +975,116 @@ export default function AdminDashboard({
     }, "Admin");
     setEditingMiscId(null);
     onRefreshGlobalState();
+  };
+
+  // ----------------------------------------------------
+  // MONTHLY REPORT FIGURE ADJUSTMENTS & JOB EDITING
+  // ----------------------------------------------------
+  const [showMonthlyEditModal, setShowMonthlyEditModal] = useState(false);
+  const [monthlyEditForm, setMonthlyEditForm] = useState({
+    revenue: "",
+    ordersRevenue: "",
+    jobsRevenue: "",
+    expenses: "",
+    adminExpenses: "",
+    miscExpenses: "",
+    profit: "",
+    outstanding: "",
+    notes: ""
+  });
+
+  const handleOpenEditMonthlyReport = () => {
+    setMonthlyEditForm({
+      revenue: String(monthAnalytics.revenue ?? 0),
+      ordersRevenue: String(monthAnalytics.ordersRevenue ?? 0),
+      jobsRevenue: String(monthAnalytics.jobsRevenue ?? 0),
+      expenses: String(monthAnalytics.expenses ?? 0),
+      adminExpenses: String(monthAnalytics.adminExpenses ?? 0),
+      miscExpenses: String(monthAnalytics.miscExpenses ?? 0),
+      profit: String(monthAnalytics.profit ?? 0),
+      outstanding: String(monthAnalytics.outstanding ?? 0),
+      notes: monthAnalytics.adjustment?.notes || ""
+    });
+    setShowMonthlyEditModal(true);
+  };
+
+  const handleSaveMonthlyReportAdjustment = () => {
+    const rev = parseFloat(monthlyEditForm.revenue) || 0;
+    const exp = parseFloat(monthlyEditForm.expenses) || 0;
+    const prof = monthlyEditForm.profit !== "" ? (parseFloat(monthlyEditForm.profit) || 0) : (rev - exp);
+
+    DBStore.saveMonthlyReportAdjustment({
+      month: selectedReportMonth,
+      revenue: rev,
+      ordersRevenue: parseFloat(monthlyEditForm.ordersRevenue) || 0,
+      jobsRevenue: parseFloat(monthlyEditForm.jobsRevenue) || 0,
+      expenses: exp,
+      adminExpenses: parseFloat(monthlyEditForm.adminExpenses) || 0,
+      miscExpenses: parseFloat(monthlyEditForm.miscExpenses) || 0,
+      profit: prof,
+      outstanding: parseFloat(monthlyEditForm.outstanding) || 0,
+      notes: monthlyEditForm.notes.trim()
+    }, "Admin");
+
+    setShowMonthlyEditModal(false);
+    onRefreshGlobalState();
+  };
+
+  const handleResetMonthlyReportAdjustment = () => {
+    if (confirm(`Reset figures for ${monthAnalytics.monthLabel} back to automatic record calculation?`)) {
+      DBStore.removeMonthlyReportAdjustment(selectedReportMonth, "Admin");
+      setShowMonthlyEditModal(false);
+      onRefreshGlobalState();
+    }
+  };
+
+  // Inline edit state for jobs in Monthly Reports
+  const [editingJobId, setEditingJobId] = useState<string | null>(null);
+  const [editingJobFields, setEditingJobFields] = useState({
+    customerName: "",
+    jobDescription: "",
+    totalAmount: "",
+    depositPaid: "",
+    balance: "",
+    status: "" as Job["status"]
+  });
+
+  const handleStartEditJob = (job: Job) => {
+    setEditingJobId(job.id);
+    setEditingJobFields({
+      customerName: job.customerName,
+      jobDescription: job.jobDescription,
+      totalAmount: String(job.totalAmount),
+      depositPaid: String(job.depositPaid),
+      balance: String(job.balance),
+      status: job.status
+    });
+  };
+
+  const handleSaveEditJob = (jobId: string) => {
+    const job = jobs.find(j => j.id === jobId);
+    if (!job) return;
+    const tot = parseFloat(editingJobFields.totalAmount) || 0;
+    const dep = parseFloat(editingJobFields.depositPaid) || 0;
+    const bal = editingJobFields.balance !== "" ? (parseFloat(editingJobFields.balance) || 0) : Math.max(0, tot - dep);
+
+    const updatedJob: Job = {
+      ...job,
+      customerName: editingJobFields.customerName.trim() || job.customerName,
+      jobDescription: editingJobFields.jobDescription.trim() || job.jobDescription,
+      totalAmount: tot,
+      depositPaid: dep,
+      balance: bal,
+      status: (editingJobFields.status || job.status) as Job["status"]
+    };
+
+    DBStore.updateJob(updatedJob);
+    setEditingJobId(null);
+    onRefreshGlobalState();
+  };
+
+  const handleCancelEditJob = () => {
+    setEditingJobId(null);
   };
 
 
@@ -1594,31 +1727,33 @@ export default function AdminDashboard({
     let yPos = 20;
 
     // Selected Month Data
-    const monthJobs = jobs.filter(j => j.date.startsWith(targetMonth));
-    const monthOrders = orders.filter(o => o.date.startsWith(targetMonth));
-    const monthRevenue = monthOrders.reduce((sum, o) => sum + o.grandTotal, 0) + monthJobs.reduce((sum, j) => sum + j.depositPaid, 0);
-    const monthExpenses = expenditures.filter(e => e.date.startsWith(targetMonth)).reduce((sum, e) => sum + e.amount, 0) + miscs.filter(m => m.date.startsWith(targetMonth)).reduce((sum, m) => sum + m.amount, 0);
-    const monthProfit = monthRevenue - monthExpenses;
-    const monthOutstanding = monthJobs.reduce((sum, j) => sum + j.balance, 0);
+    const targetAnalytics = computeMonthlyAnalytics(targetMonth);
+    const monthJobs = targetAnalytics.monthJobs;
+    const monthOrders = targetAnalytics.monthOrders;
+    const monthRevenue = targetAnalytics.revenue;
+    const monthExpenses = targetAnalytics.expenses;
+    const monthProfit = targetAnalytics.profit;
+    const monthOutstanding = targetAnalytics.outstanding;
     
     const staffNotesList = DBStore.getStaffNotes();
     const monthLateNotes = staffNotesList.filter(n => n.date.startsWith(targetMonth) && n.sessionType === "Late Arrival");
     const staffAttendanceList = DBStore.getStaffAttendance();
     const monthAttendance = staffAttendanceList.filter(a => a.date.startsWith(targetMonth));
-    const completedJobs = monthJobs.filter(j => j.status === "Ready" || j.status === "Delivered").length;
-    const completionRate = monthJobs.length ? (completedJobs / monthJobs.length) * 100 : 0;
+    const completedJobs = targetAnalytics.completedJobs;
+    const completionRate = targetAnalytics.completionRate;
 
     // Previous Month Data for MoM Comparison
-    const prevJobs = jobs.filter(j => j.date.startsWith(targetPrevMonth));
-    const prevOrders = orders.filter(o => o.date.startsWith(targetPrevMonth));
-    const prevRevenue = prevOrders.reduce((sum, o) => sum + o.grandTotal, 0) + prevJobs.reduce((sum, j) => sum + j.depositPaid, 0);
-    const prevExpenses = expenditures.filter(e => e.date.startsWith(targetPrevMonth)).reduce((sum, e) => sum + e.amount, 0) + miscs.filter(m => m.date.startsWith(targetPrevMonth)).reduce((sum, m) => sum + m.amount, 0);
-    const prevProfit = prevRevenue - prevExpenses;
-    const prevOutstanding = prevJobs.reduce((sum, j) => sum + j.balance, 0);
+    const prevAnalytics = computeMonthlyAnalytics(targetPrevMonth);
+    const prevJobs = prevAnalytics.monthJobs;
+    const prevOrders = prevAnalytics.monthOrders;
+    const prevRevenue = prevAnalytics.revenue;
+    const prevExpenses = prevAnalytics.expenses;
+    const prevProfit = prevAnalytics.profit;
+    const prevOutstanding = prevAnalytics.outstanding;
     const prevLateNotes = staffNotesList.filter(n => n.date.startsWith(targetPrevMonth) && n.sessionType === "Late Arrival");
     const prevAttendance = staffAttendanceList.filter(a => a.date.startsWith(targetPrevMonth));
-    const prevCompletedJobs = prevJobs.filter(j => j.status === "Ready" || j.status === "Delivered").length;
-    const prevCompletionRate = prevJobs.length ? (prevCompletedJobs / prevJobs.length) * 100 : 0;
+    const prevCompletedJobs = prevAnalytics.completedJobs;
+    const prevCompletionRate = prevAnalytics.completionRate;
 
     const calcMomPill = (cur: number, prev: number, isPercent = false, isCurrency = false) => {
       const diff = cur - prev;
@@ -1677,6 +1812,9 @@ export default function AdminDashboard({
     // Financial Summary Section
     addSectionHeader(`Financial Summary — ${curLabel}`, [30, 58, 138]);
     addNote(`Overall financial health for ${curLabel}. Revenue includes all order totals + job deposits. Expenses combine admin expenditures + staff miscellaneous spends.`);
+    if (targetAnalytics.isAdjusted) {
+      addNote(`* Note: Figures for ${curLabel} were adjusted by Administrator to match verified records.${targetAnalytics.adjustment?.notes ? ` (${targetAnalytics.adjustment.notes})` : ""}`);
+    }
     
     const kpiData = [
       ["Total Revenue", `${currency} ${monthRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, "General orders + job deposits"],
@@ -3728,6 +3866,11 @@ export default function AdminDashboard({
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
                   {monthAnalytics.monthLabel}
                 </span>
+                {monthAnalytics.isAdjusted && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                    <Pencil className="h-3 w-3" /> Adjusted by Admin
+                  </span>
+                )}
               </div>
               <p className="text-xs text-gray-400 dark:text-zinc-500 font-medium mt-0.5">
                 Aggregated revenue channels, expenditures, and performance for the selected month
@@ -3735,6 +3878,22 @@ export default function AdminDashboard({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleOpenEditMonthlyReport}
+                className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-black py-2 px-3.5 rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95"
+                title="Edit figures or adjust digits for this month's report"
+              >
+                <Pencil className="h-3.5 w-3.5" /> Adjust Figures / Edit Digits
+              </button>
+              {monthAnalytics.isAdjusted && (
+                <button
+                  onClick={handleResetMonthlyReportAdjustment}
+                  className="inline-flex items-center gap-1 border border-amber-500/30 text-amber-700 dark:text-amber-400 font-bold py-2 px-3 rounded-xl text-xs transition-all cursor-pointer bg-amber-500/10 hover:bg-amber-500/20 active:scale-95"
+                  title="Reset to calculated numbers"
+                >
+                  Reset to Auto
+                </button>
+              )}
               <button onClick={() => handleDownloadMonthlyReport(selectedReportMonth)} className="inline-flex items-center gap-1.5 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-black py-2 px-3.5 rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95">
                 <Download className="h-3.5 w-3.5" /> Download Report (PDF)
               </button>
@@ -3804,6 +3963,27 @@ export default function AdminDashboard({
             </div>
           </div>
 
+          {monthAnalytics.isAdjusted && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-800 dark:text-amber-300 font-black uppercase text-[10px] tracking-wider">Adjusted Notice</span>
+                <span className="text-amber-800 dark:text-amber-300 font-medium">
+                  Figures for <strong>{monthAnalytics.monthLabel}</strong> have been adjusted by Administrator to match actual verified work.
+                  {monthAnalytics.adjustment?.notes ? ` ("${monthAnalytics.adjustment.notes}")` : ""}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={handleOpenEditMonthlyReport} className="text-[11px] font-bold text-amber-700 dark:text-amber-300 underline hover:text-amber-900 cursor-pointer">
+                  Edit Digits
+                </button>
+                <span className="text-amber-400">·</span>
+                <button onClick={handleResetMonthlyReportAdjustment} className="text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer">
+                  Reset to Auto (GHS {monthAnalytics.rawRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })})
+                </button>
+              </div>
+            </div>
+          )}
+
             {/* Monthly Master Report */}
             <div className="space-y-6">
               {/* ===== EXECUTIVE SUMMARY ===== */}
@@ -3826,37 +4006,55 @@ export default function AdminDashboard({
                         label: `Total Revenue (${monthAnalytics.monthLabel} Only)`,
                         value: `${currency} ${monthAnalytics.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
                         tone: "text-emerald-600 dark:text-emerald-400",
-                        sub: `Orders: ${currency} ${monthAnalytics.ordersRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Job Deposits: ${currency} ${monthAnalytics.jobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                        sub: `Orders: ${currency} ${monthAnalytics.ordersRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Job Deposits: ${currency} ${monthAnalytics.jobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                        editable: true,
+                        isAdjusted: monthAnalytics.isAdjusted && monthAnalytics.adjustment?.revenue !== undefined,
+                        rawVal: monthAnalytics.rawRevenue
                       },
                       {
                         label: `Total Expenses (${monthAnalytics.monthLabel} Only)`,
                         value: `${currency} ${monthAnalytics.expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
                         tone: "text-rose-600 dark:text-rose-400",
-                        sub: `Admin Purchases: ${currency} ${monthAnalytics.adminExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Misc: ${currency} ${monthAnalytics.miscExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                        sub: `Admin Purchases: ${currency} ${monthAnalytics.adminExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Misc: ${currency} ${monthAnalytics.miscExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                        editable: true,
+                        isAdjusted: monthAnalytics.isAdjusted && monthAnalytics.adjustment?.expenses !== undefined,
+                        rawVal: monthAnalytics.rawExpenses
                       },
                       {
                         label: `Net Profit / Loss (${monthAnalytics.monthLabel})`,
                         value: `${currency} ${monthAnalytics.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
                         tone: monthAnalytics.profit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
-                        sub: "Revenue minus all expenses for this month only"
+                        sub: "Revenue minus all expenses for this month only",
+                        editable: true,
+                        isAdjusted: monthAnalytics.isAdjusted && monthAnalytics.adjustment?.profit !== undefined,
+                        rawVal: monthAnalytics.rawProfit
                       },
                       {
                         label: `General Orders Revenue (${monthAnalytics.monthOrders.length} orders)`,
                         value: `${currency} ${monthAnalytics.ordersRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
                         tone: "text-blue-600 dark:text-blue-400",
-                        sub: `All counter orders placed in ${monthAnalytics.monthLabel}`
+                        sub: `All counter orders placed in ${monthAnalytics.monthLabel}`,
+                        editable: true,
+                        isAdjusted: monthAnalytics.isAdjusted && monthAnalytics.adjustment?.ordersRevenue !== undefined,
+                        rawVal: monthAnalytics.rawOrdersRevenue
                       },
                       {
                         label: `Custom Jobs Deposits (${monthAnalytics.monthJobs.length} jobs)`,
                         value: `${currency} ${monthAnalytics.jobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
                         tone: "text-purple-600 dark:text-purple-400",
-                        sub: `Deposits received on jobs in ${monthAnalytics.monthLabel}`
+                        sub: `Deposits received on jobs in ${monthAnalytics.monthLabel}`,
+                        editable: true,
+                        isAdjusted: monthAnalytics.isAdjusted && monthAnalytics.adjustment?.jobsRevenue !== undefined,
+                        rawVal: monthAnalytics.rawJobsRevenue
                       },
                       {
                         label: "Outstanding Balances Owed",
                         value: `${currency} ${monthAnalytics.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
                         tone: "text-amber-600 dark:text-amber-400",
-                        sub: `Unpaid customer balance on ${monthAnalytics.monthLabel} jobs`
+                        sub: `Unpaid customer balance on ${monthAnalytics.monthLabel} jobs`,
+                        editable: true,
+                        isAdjusted: monthAnalytics.isAdjusted && monthAnalytics.adjustment?.outstanding !== undefined,
+                        rawVal: monthAnalytics.rawOutstanding
                       },
                       {
                         label: "Job Completion Rate",
@@ -3877,9 +4075,27 @@ export default function AdminDashboard({
                         sub: "Staff arrival incidents logged"
                       },
                     ].map((card, i) => (
-                      <div key={i} className="bg-white/5 dark:bg-zinc-900/20 p-4 flex flex-col justify-between">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-zinc-500">{card.label}</span>
-                        <span className={`text-base font-black mt-1 block ${card.tone}`}>{card.value}</span>
+                      <div key={i} className="bg-white/5 dark:bg-zinc-900/20 p-4 flex flex-col justify-between group relative">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-zinc-500">{card.label}</span>
+                          {card.editable && (
+                            <button
+                              onClick={handleOpenEditMonthlyReport}
+                              title="Edit this figure"
+                              className="text-gray-400 hover:text-amber-500 dark:hover:text-amber-400 transition cursor-pointer p-0.5 opacity-60 hover:opacity-100"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                        <div className="mt-1">
+                          <span className={`text-base font-black block ${card.tone}`}>{card.value}</span>
+                          {card.isAdjusted && card.rawVal !== undefined && (
+                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                              Auto: {currency} {card.rawVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </span>
+                          )}
+                        </div>
                         {card.sub && <span className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1 block font-medium">{card.sub}</span>}
                       </div>
                     ))}
@@ -3933,39 +4149,135 @@ export default function AdminDashboard({
                       <th className="py-3 px-3">Status</th>
                       <th className="py-3 px-3">Priority</th>
                       <th className="py-3 px-3">Assigned Staff</th>
+                      <th className="py-3 px-3 text-right w-20">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {(() => {
                       const monthJobs = monthAnalytics.monthJobs;
                       if (monthJobs.length === 0) {
-                        return <tr><td colSpan={9} className="py-6 text-center text-gray-400 dark:text-zinc-500 text-[10px]">No jobs created in {monthAnalytics.monthLabel}.</td></tr>;
+                        return <tr><td colSpan={10} className="py-6 text-center text-gray-400 dark:text-zinc-500 text-[10px]">No jobs created in {monthAnalytics.monthLabel}.</td></tr>;
                       }
-                      return monthJobs.map((job, i) => (
-                        <tr key={job.id} className={`hover:bg-white/5 transition-colors ${i % 2 === 0 ? "bg-white/2 dark:bg-white/1" : ""}`}>
-                          <td className="py-3 px-3 font-mono font-bold text-blue-700 dark:text-blue-400">{job.jobNumber}</td>
-                          <td className="py-3 px-3 font-semibold text-gray-800 dark:text-zinc-200">{job.customerName}</td>
-                          <td className="py-3 px-3 text-gray-600 dark:text-zinc-400 max-w-[200px] truncate">{job.jobDescription}</td>
-                          <td className="py-3 px-3 text-right font-black text-gray-900 dark:text-white">{currency} {job.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                          <td className="py-3 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400">{currency} {job.depositPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                          <td className="py-3 px-3 text-right font-bold text-amber-600 dark:text-amber-400">{currency} {job.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                          <td className="py-3 px-3">
-                            <span className="px-2 py-0.5 rounded-full text-[9px] bg-blue-500/10 text-blue-600 dark:text-blue-400 font-extrabold border border-blue-500/20 uppercase tracking-widest">
-                              {job.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border uppercase tracking-widest ${
-                              job.priority === "High" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20" :
-                              job.priority === "Medium" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" :
-                              "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                            }`}>
-                              {job.priority}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3 text-gray-600 dark:text-zinc-400">{job.assignedStaff || "Unassigned"}</td>
-                        </tr>
-                      ));
+                      return monthJobs.map((job, i) => {
+                        const isEditingThis = editingJobId === job.id;
+                        if (isEditingThis) {
+                          return (
+                            <tr key={job.id} className="bg-amber-500/5 border border-amber-500/20">
+                              <td className="py-2 px-2 font-mono font-bold text-blue-700 dark:text-blue-400">{job.jobNumber}</td>
+                              <td className="py-2 px-2">
+                                <input
+                                  value={editingJobFields.customerName}
+                                  onChange={e => setEditingJobFields(f => ({ ...f, customerName: e.target.value }))}
+                                  placeholder="Customer"
+                                  className="w-full bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                />
+                              </td>
+                              <td className="py-2 px-2">
+                                <input
+                                  value={editingJobFields.jobDescription}
+                                  onChange={e => setEditingJobFields(f => ({ ...f, jobDescription: e.target.value }))}
+                                  placeholder="Description"
+                                  className="w-full bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs text-gray-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-right">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={editingJobFields.totalAmount}
+                                  onChange={e => {
+                                    const tot = parseFloat(e.target.value) || 0;
+                                    const dep = parseFloat(editingJobFields.depositPaid) || 0;
+                                    setEditingJobFields(f => ({ ...f, totalAmount: e.target.value, balance: String(Math.max(0, Number((tot - dep).toFixed(2)))) }));
+                                  }}
+                                  className="w-20 bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-black text-gray-900 dark:text-white text-right focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-right">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={editingJobFields.depositPaid}
+                                  onChange={e => {
+                                    const dep = parseFloat(e.target.value) || 0;
+                                    const tot = parseFloat(editingJobFields.totalAmount) || 0;
+                                    setEditingJobFields(f => ({ ...f, depositPaid: e.target.value, balance: String(Math.max(0, Number((tot - dep).toFixed(2)))) }));
+                                  }}
+                                  className="w-20 bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 text-right focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-right">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={editingJobFields.balance}
+                                  onChange={e => setEditingJobFields(f => ({ ...f, balance: e.target.value }))}
+                                  className="w-20 bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-bold text-amber-600 dark:text-amber-400 text-right focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                />
+                              </td>
+                              <td className="py-2 px-2">
+                                <select
+                                  value={editingJobFields.status}
+                                  onChange={e => setEditingJobFields(f => ({ ...f, status: e.target.value as any }))}
+                                  className="bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-1.5 py-1 text-[10px] font-bold text-gray-900 dark:text-white focus:outline-none"
+                                >
+                                  {["Pending", "Design", "Printing", "Ready", "Delivered", "Cancelled"].map(st => (
+                                    <option key={st} value={st}>{st}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="py-2 px-2">
+                                <span className="text-[10px] text-gray-400">{job.priority}</span>
+                              </td>
+                              <td className="py-2 px-2 text-gray-600 dark:text-zinc-400 text-[10px]">{job.assignedStaff || "Unassigned"}</td>
+                              <td className="py-2 px-2 text-right">
+                                <div className="flex items-center gap-1 justify-end">
+                                  <button onClick={() => handleSaveEditJob(job.id)} className="px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-emerald-500/30 transition border border-emerald-500/30">Save</button>
+                                  <button onClick={handleCancelEditJob} className="px-2 py-1 rounded-lg bg-white/10 text-gray-600 dark:text-zinc-400 text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-white/20 transition">Cancel</button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return (
+                          <tr key={job.id} className={`hover:bg-white/5 transition-colors group ${i % 2 === 0 ? "bg-white/2 dark:bg-white/1" : ""}`}>
+                            <td className="py-3 px-3 font-mono font-bold text-blue-700 dark:text-blue-400">{job.jobNumber}</td>
+                            <td className="py-3 px-3 font-semibold text-gray-800 dark:text-zinc-200">{job.customerName}</td>
+                            <td className="py-3 px-3 text-gray-600 dark:text-zinc-400 max-w-[200px] truncate">{job.jobDescription}</td>
+                            <td className="py-3 px-3 text-right font-black text-gray-900 dark:text-white">{currency} {job.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            <td className="py-3 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400">{currency} {job.depositPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            <td className="py-3 px-3 text-right font-bold text-amber-600 dark:text-amber-400">{currency} {job.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            <td className="py-3 px-3">
+                              <span className="px-2 py-0.5 rounded-full text-[9px] bg-blue-500/10 text-blue-600 dark:text-blue-400 font-extrabold border border-blue-500/20 uppercase tracking-widest">
+                                {job.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border uppercase tracking-widest ${
+                                job.priority === "High" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20" :
+                                job.priority === "Medium" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" :
+                                "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                              }`}>
+                                {job.priority}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-gray-600 dark:text-zinc-400">{job.assignedStaff || "Unassigned"}</td>
+                            <td className="py-3 px-3 text-right">
+                              <button
+                                onClick={() => handleStartEditJob(job)}
+                                title="Edit this job"
+                                className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-500/10 cursor-pointer transition duration-200 opacity-0 group-hover:opacity-100"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      });
                     })()}
                   </tbody>
                 </table>
@@ -4391,6 +4703,217 @@ export default function AdminDashboard({
               </div>
             </div>
           </div>
+
+          {/* Modal: Adjust Monthly Report Figures */}
+          {showMonthlyEditModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setShowMonthlyEditModal(false)}>
+              <div className="max-w-2xl w-full rounded-2xl border border-white/20 bg-white dark:bg-zinc-900 p-6 shadow-2xl relative overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="cmyk-bar absolute top-0 left-0 right-0 h-[3px]" />
+                
+                <div className="flex items-center justify-between border-b border-gray-200 dark:border-zinc-800 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-black text-gray-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                        <Pencil className="h-4 w-4 text-amber-500" /> Adjust Monthly Report Digits
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                        {monthAnalytics.monthLabel}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1">
+                      Adjust or override financial figures for this month so records suit the actual money received and spent.
+                    </p>
+                  </div>
+                  <button onClick={() => setShowMonthlyEditModal(false)} className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 cursor-pointer">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+                  {/* Reference banner showing system calculated values */}
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-900/50 text-[11px] text-blue-900 dark:text-blue-200">
+                    <div className="font-bold mb-1">System Auto-Calculated Baseline ({monthAnalytics.monthLabel}):</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[10px]">
+                      <div>Revenue: <strong>{currency} {monthAnalytics.rawRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></div>
+                      <div>Expenses: <strong>{currency} {monthAnalytics.rawExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></div>
+                      <div>Profit: <strong>{currency} {monthAnalytics.rawProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></div>
+                      <div>Bal: <strong>{currency} {monthAnalytics.rawOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></div>
+                    </div>
+                  </div>
+
+                  {/* Section 1: Revenue Overrides */}
+                  <div className="space-y-3">
+                    <h4 className="text-[11px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">1. Revenue Channels ({currency})</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-600 dark:text-zinc-400 block mb-1">Total Month Revenue *</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={monthlyEditForm.revenue}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setMonthlyEditForm(f => {
+                              const rev = parseFloat(val) || 0;
+                              const exp = parseFloat(f.expenses) || 0;
+                              return { ...f, revenue: val, profit: String(Number((rev - exp).toFixed(2))) };
+                            });
+                          }}
+                          className="w-full bg-gray-50 dark:bg-zinc-800 border border-emerald-500/40 rounded-xl px-3 py-2 text-xs font-black text-emerald-600 dark:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-600 dark:text-zinc-400 block mb-1">General Orders Revenue</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={monthlyEditForm.ordersRevenue}
+                          onChange={e => setMonthlyEditForm(f => ({ ...f, ordersRevenue: e.target.value }))}
+                          className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-600 dark:text-zinc-400 block mb-1">Job Deposits Received</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={monthlyEditForm.jobsRevenue}
+                          onChange={e => setMonthlyEditForm(f => ({ ...f, jobsRevenue: e.target.value }))}
+                          className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 2: Expense Overrides */}
+                  <div className="space-y-3">
+                    <h4 className="text-[11px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">2. Expenses & Overhead ({currency})</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-600 dark:text-zinc-400 block mb-1">Total Month Expenses *</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={monthlyEditForm.expenses}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setMonthlyEditForm(f => {
+                              const exp = parseFloat(val) || 0;
+                              const rev = parseFloat(f.revenue) || 0;
+                              return { ...f, expenses: val, profit: String(Number((rev - exp).toFixed(2))) };
+                            });
+                          }}
+                          className="w-full bg-gray-50 dark:bg-zinc-800 border border-rose-500/40 rounded-xl px-3 py-2 text-xs font-black text-rose-600 dark:text-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-600 dark:text-zinc-400 block mb-1">Admin Purchases / Overhead</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={monthlyEditForm.adminExpenses}
+                          onChange={e => setMonthlyEditForm(f => ({ ...f, adminExpenses: e.target.value }))}
+                          className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-600 dark:text-zinc-400 block mb-1">Misc / Minor Spends</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={monthlyEditForm.miscExpenses}
+                          onChange={e => setMonthlyEditForm(f => ({ ...f, miscExpenses: e.target.value }))}
+                          className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 3: Profit & Outstanding */}
+                  <div className="space-y-3">
+                    <h4 className="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">3. Net Profit & Client Balances ({currency})</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-[10px] font-bold text-gray-600 dark:text-zinc-400">Net Profit / Loss</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const rev = parseFloat(monthlyEditForm.revenue) || 0;
+                              const exp = parseFloat(monthlyEditForm.expenses) || 0;
+                              setMonthlyEditForm(f => ({ ...f, profit: String(Number((rev - exp).toFixed(2))) }));
+                            }}
+                            className="text-[9px] text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer"
+                          >
+                            Auto-calc (Rev - Exp)
+                          </button>
+                        </div>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={monthlyEditForm.profit}
+                          onChange={e => setMonthlyEditForm(f => ({ ...f, profit: e.target.value }))}
+                          className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-black text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-600 dark:text-zinc-400 block mb-1">Outstanding Balances Owed</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={monthlyEditForm.outstanding}
+                          onChange={e => setMonthlyEditForm(f => ({ ...f, outstanding: e.target.value }))}
+                          className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-black text-amber-600 dark:text-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 4: Audit Reason */}
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-600 dark:text-zinc-400 block mb-1">Audit Reconciliation Note / Reason</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Reconciled with physical counter till and bank deposits"
+                      value={monthlyEditForm.notes}
+                      onChange={e => setMonthlyEditForm(f => ({ ...f, notes: e.target.value }))}
+                      className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Modal Actions */}
+                <div className="mt-6 pt-4 border-t border-gray-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  {monthAnalytics.isAdjusted ? (
+                    <button
+                      type="button"
+                      onClick={handleResetMonthlyReportAdjustment}
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-black transition cursor-pointer border border-rose-500/30"
+                    >
+                      Reset to Auto-Calculated
+                    </button>
+                  ) : <div />}
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowMonthlyEditModal(false)}
+                      className="px-4 py-2 rounded-xl bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 text-xs font-bold transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveMonthlyReportAdjustment}
+                      className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black shadow-md transition cursor-pointer active:scale-95"
+                    >
+                      Save & Apply Changes
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

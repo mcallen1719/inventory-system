@@ -19,7 +19,8 @@ import {
   StaffNote,
   DeletedJob,
   ReportedActivity,
-  AdminInvoice
+  AdminInvoice,
+  MonthlyReportAdjustment
 } from "./types";
 import { supabase, isSupabaseEnabled } from "./supabaseClient";
 import { io } from "socket.io-client";
@@ -49,7 +50,8 @@ const SOCKET_KEYS = [
   "printing_db_deleted_jobs",
   "printing_db_live_activity",
   "printing_db_reported_activities",
-  "printing_db_admin_invoices"
+  "printing_db_admin_invoices",
+  "printing_db_monthly_adjustments"
 ];
 
 function getSyncServerUrl(): string {
@@ -192,7 +194,8 @@ const KEYS = {
   DELETED_JOBS: "printing_db_deleted_jobs",
   LIVE_ACTIVITY: "printing_db_live_activity",
   REPORTED_ACTIVITIES: "printing_db_reported_activities",
-  ADMIN_INVOICES: "printing_db_admin_invoices"
+  ADMIN_INVOICES: "printing_db_admin_invoices",
+  MONTHLY_ADJUSTMENTS: "printing_db_monthly_adjustments"
 };
 
 // Auto-clear demo mockup data on first load of this production release
@@ -1165,6 +1168,37 @@ export const DBStore = {
       const filtered = invoices.filter(i => i.id !== id);
       setStored(KEYS.ADMIN_INVOICES, filtered);
       this.addAuditLog(user, "Delete", "Admin Invoices", `Deleted admin invoice ${invoice.invoiceNumber} for ${invoice.customerName}.`);
+    }
+  },
+
+  getMonthlyReportAdjustments(): Record<string, MonthlyReportAdjustment> {
+    return getStored<Record<string, MonthlyReportAdjustment>>(KEYS.MONTHLY_ADJUSTMENTS, {});
+  },
+
+  getMonthlyReportAdjustment(month: string): MonthlyReportAdjustment | null {
+    const all = this.getMonthlyReportAdjustments();
+    return all[month] || null;
+  },
+
+  saveMonthlyReportAdjustment(adj: MonthlyReportAdjustment, user: string = "Admin") {
+    const all = this.getMonthlyReportAdjustments();
+    all[adj.month] = {
+      ...adj,
+      updatedAt: new Date().toISOString(),
+      updatedBy: user
+    };
+    setStored(KEYS.MONTHLY_ADJUSTMENTS, all);
+    this.addAuditLog(user, "Edit", "Monthly Report", `Adjusted figures for monthly report ${adj.month}.${adj.notes ? ` Notes: ${adj.notes}` : ""}`);
+    this.broadcastLiveActivity(user, "Edit", "Monthly Report", `Updated monthly report figures for ${adj.month}`);
+  },
+
+  removeMonthlyReportAdjustment(month: string, user: string = "Admin") {
+    const all = this.getMonthlyReportAdjustments();
+    if (all[month]) {
+      delete all[month];
+      setStored(KEYS.MONTHLY_ADJUSTMENTS, all);
+      this.addAuditLog(user, "Delete", "Monthly Report", `Reset monthly report figures for ${month} to auto-calculated.`);
+      this.broadcastLiveActivity(user, "Delete", "Monthly Report", `Reset monthly report figures for ${month}`);
     }
   }
 };
