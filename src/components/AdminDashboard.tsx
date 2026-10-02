@@ -36,7 +36,8 @@ import {
   Calendar,
   ArrowUpRight,
   ArrowDownRight,
-  X
+  X,
+  Pencil
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -54,7 +55,7 @@ import {
   Cell
 } from "recharts";
 import { DBStore } from "../dbStore";
-import { CompanySettings, Expenditure, InventoryItem, UserRole, StaffAccount, StaffNote, ReportedActivity } from "../types";
+import { CompanySettings, Expenditure, DailyMiscellaneous, InventoryItem, UserRole, StaffAccount, StaffNote, ReportedActivity } from "../types";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -847,6 +848,13 @@ export default function AdminDashboard({
   const [expReceiptFile, setExpReceiptFile] = useState<string>("");
   const expReceiptRef = React.useRef<HTMLInputElement>(null);
 
+  // Inline edit state for expenditures & misc
+  const [editingExpId, setEditingExpId] = useState<string | null>(null);
+  const [editingExpFields, setEditingExpFields] = useState<{ item: string; amount: string; supplier: string; description: string; date: string }>({ item: "", amount: "", supplier: "", description: "", date: "" });
+  const [editingMiscId, setEditingMiscId] = useState<string | null>(null);
+  const [editingMiscFields, setEditingMiscFields] = useState<{ item: string; amount: string; description: string; date: string }>({ item: "", amount: "", description: "", date: "" });
+
+
   const handleExpReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -899,6 +907,51 @@ export default function AdminDashboard({
       DBStore.deleteExpenditure(id, "Admin");
       onRefreshGlobalState();
     }
+  };
+
+  const handleStartEditExp = (exp: Expenditure) => {
+    setEditingExpId(exp.id);
+    setEditingExpFields({ item: exp.item, amount: String(exp.amount), supplier: exp.supplier, description: exp.description || "", date: exp.date });
+  };
+  const handleCancelEditExp = () => { setEditingExpId(null); };
+  const handleSaveEditExp = (id: string) => {
+    const amt = parseFloat(editingExpFields.amount);
+    if (!editingExpFields.item.trim() || isNaN(amt) || amt < 0) {
+      alert("Please enter a valid item name and amount.");
+      return;
+    }
+    DBStore.updateExpenditure(id, {
+      item: editingExpFields.item.trim(),
+      amount: amt,
+      supplier: editingExpFields.supplier.trim(),
+      description: editingExpFields.description.trim(),
+      date: editingExpFields.date,
+      unitPrice: amt,
+      quantity: 1
+    }, "Admin");
+    setEditingExpId(null);
+    onRefreshGlobalState();
+  };
+
+  const handleStartEditMisc = (m: DailyMiscellaneous) => {
+    setEditingMiscId(m.id);
+    setEditingMiscFields({ item: m.item, amount: String(m.amount), description: m.description || "", date: m.date });
+  };
+  const handleCancelEditMisc = () => { setEditingMiscId(null); };
+  const handleSaveEditMisc = (id: string) => {
+    const amt = parseFloat(editingMiscFields.amount);
+    if (!editingMiscFields.item.trim() || isNaN(amt) || amt < 0) {
+      alert("Please enter a valid item name and amount.");
+      return;
+    }
+    DBStore.updateDailyMiscellaneous(id, {
+      item: editingMiscFields.item.trim(),
+      amount: amt,
+      description: editingMiscFields.description.trim(),
+      date: editingMiscFields.date
+    }, "Admin");
+    setEditingMiscId(null);
+    onRefreshGlobalState();
   };
 
 
@@ -3577,42 +3630,81 @@ export default function AdminDashboard({
                     <th className="py-3.5 px-4">Supplier</th>
                     <th className="py-3.5 px-4 text-right">Amount</th>
                     <th className="py-3.5 px-4 text-center">Receipt</th>
-                    <th className="py-3.5 px-4 text-right w-16 rounded-r-xl">Action</th>
+                    <th className="py-3.5 px-4 text-right w-24 rounded-r-xl">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 text-gray-700 dark:text-zinc-300">
-                  {expenditures.map((exp) => (
-                    <tr key={exp.id} className="hover:bg-white/5 dark:hover:bg-white/5 transition-all even:bg-white/2 dark:even:bg-white/1">
-                      <td className="py-3.5 px-4 font-mono font-bold text-gray-400 dark:text-zinc-500">{exp.date}</td>
-                      <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white">
-                        {exp.item}
-                        {exp.description && <span className="block text-[10px] text-gray-400 dark:text-zinc-500 font-medium mt-0.5">{exp.description}</span>}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-0.5 rounded-full text-[9px] bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold border border-rose-500/20 uppercase tracking-widest">
-                          {exp.category}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 font-semibold text-gray-500 dark:text-zinc-400">{exp.supplier}</td>
-                      <td className="py-3.5 px-4 text-right font-black text-rose-600 dark:text-rose-400">
-                        {currency} {exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        {exp.receiptUrl ? (
-                          <button onClick={() => setViewingReceipt(exp.receiptUrl)} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-indigo-500/20 transition">
-                            View
-                          </button>
-                        ) : (
+                  {expenditures.map((exp) =>
+                    editingExpId === exp.id ? (
+                      <tr key={exp.id} className="bg-amber-500/5 border border-amber-500/20">
+                        <td className="py-2 px-3">
+                          <input type="date" value={editingExpFields.date} onChange={e => setEditingExpFields(f => ({ ...f, date: e.target.value }))}
+                            className="w-full bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-mono text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                        </td>
+                        <td className="py-2 px-3 space-y-1">
+                          <input value={editingExpFields.item} onChange={e => setEditingExpFields(f => ({ ...f, item: e.target.value }))}
+                            placeholder="Item name" className="w-full bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                          <input value={editingExpFields.description} onChange={e => setEditingExpFields(f => ({ ...f, description: e.target.value }))}
+                            placeholder="Description (optional)" className="w-full bg-white/10 dark:bg-zinc-900/60 border border-amber-500/20 rounded-lg px-2 py-1 text-[10px] text-gray-500 dark:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="px-2.5 py-0.5 rounded-full text-[9px] bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold border border-rose-500/20 uppercase tracking-widest">{exp.category}</span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <input value={editingExpFields.supplier} onChange={e => setEditingExpFields(f => ({ ...f, supplier: e.target.value }))}
+                            placeholder="Supplier" className="w-full bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs text-gray-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                        </td>
+                        <td className="py-2 px-3 text-right">
+                          <div className="flex items-center gap-1 justify-end">
+                            <span className="text-[10px] text-gray-400 font-mono">{currency}</span>
+                            <input type="number" min="0" step="0.01" value={editingExpFields.amount} onChange={e => setEditingExpFields(f => ({ ...f, amount: e.target.value }))}
+                              className="w-28 bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-black text-rose-600 dark:text-rose-400 text-right focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                          </div>
+                        </td>
+                        <td className="py-2 px-3 text-center">
                           <span className="text-[10px] text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <button onClick={() => handleDeleteExpenditure(exp.id)} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 cursor-pointer transition duration-200">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="py-2 px-3 text-right">
+                          <div className="flex items-center gap-1 justify-end">
+                            <button onClick={() => handleSaveEditExp(exp.id)} className="px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-emerald-500/30 transition border border-emerald-500/30">Save</button>
+                            <button onClick={handleCancelEditExp} className="px-2 py-1 rounded-lg bg-white/10 text-gray-600 dark:text-zinc-400 text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-white/20 transition">Cancel</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr key={exp.id} className="hover:bg-white/5 dark:hover:bg-white/5 transition-all even:bg-white/2 dark:even:bg-white/1 group">
+                        <td className="py-3.5 px-4 font-mono font-bold text-gray-400 dark:text-zinc-500">{exp.date}</td>
+                        <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white">
+                          {exp.item}
+                          {exp.description && <span className="block text-[10px] text-gray-400 dark:text-zinc-500 font-medium mt-0.5">{exp.description}</span>}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="px-2.5 py-0.5 rounded-full text-[9px] bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold border border-rose-500/20 uppercase tracking-widest">{exp.category}</span>
+                        </td>
+                        <td className="py-3.5 px-4 font-semibold text-gray-500 dark:text-zinc-400">{exp.supplier}</td>
+                        <td className="py-3.5 px-4 text-right font-black text-rose-600 dark:text-rose-400">
+                          {currency} {exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          {exp.receiptUrl ? (
+                            <button onClick={() => setViewingReceipt(exp.receiptUrl)} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-indigo-500/20 transition">View</button>
+                          ) : (
+                            <span className="text-[10px] text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center gap-1 justify-end">
+                            <button onClick={() => handleStartEditExp(exp)} title="Edit this expenditure" className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-500/10 cursor-pointer transition duration-200 opacity-0 group-hover:opacity-100">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button onClick={() => handleDeleteExpenditure(exp.id)} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 cursor-pointer transition duration-200">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  )}
                 </tbody>
               </table>
             </div>
@@ -3959,33 +4051,117 @@ export default function AdminDashboard({
                       <th className="py-3 px-4">Date</th>
                       <th className="py-3 px-4">Item</th>
                       <th className="py-3 px-4">Category</th>
-                      <th className="py-3 px-4">Supplier</th>
+                      <th className="py-3 px-4">Supplier / Info</th>
                       <th className="py-3 px-4 text-right">Amount</th>
+                      <th className="py-3 px-4 text-right w-24">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {(() => {
                       const combined = [
                         ...monthAnalytics.monthExps.map(e => ({ ...e, _type: "Expenditure" as const })),
-                        ...monthAnalytics.monthMiscs.map(m => ({ ...m, _type: "Miscellaneous" as const, category: "Miscellaneous" as const }))
+                        ...monthAnalytics.monthMiscs.map(m => ({ ...m, _type: "Miscellaneous" as const, category: "Miscellaneous" as const, supplier: undefined as string | undefined }))
                       ].sort((a, b) => b.date.localeCompare(a.date));
 
                       if (combined.length === 0) {
-                        return <tr><td colSpan={5} className="py-6 text-center text-gray-400 dark:text-zinc-500 text-[10px]">No expenditures in {monthAnalytics.monthLabel}.</td></tr>;
+                        return <tr><td colSpan={6} className="py-6 text-center text-gray-400 dark:text-zinc-500 text-[10px]">No expenditures in {monthAnalytics.monthLabel}.</td></tr>;
                       }
-                      return combined.map((item, i) => (
-                        <tr key={item.id} className={`hover:bg-white/5 transition-colors ${i % 2 === 0 ? "bg-white/2 dark:bg-white/1" : ""}`}>
-                          <td className="py-3 px-4 font-mono text-gray-500 dark:text-zinc-400">{item.date}</td>
-                          <td className="py-3 px-4 font-semibold text-gray-900 dark:text-white">{item.item}</td>
-                          <td className="py-3 px-4">
-                            <span className="px-2.5 py-0.5 rounded-full text-[9px] bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold border border-rose-500/20 uppercase tracking-widest">
-                              {item.category}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-gray-500 dark:text-zinc-400">{"supplier" in item ? item.supplier : item.description || "—"}</td>
-                          <td className="py-3 px-4 text-right font-black text-rose-600 dark:text-rose-400">{currency} {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                        </tr>
-                      ));
+
+                      return combined.map((item, i) => {
+                        const isExp = item._type === "Expenditure";
+                        const isEditingThis = isExp ? editingExpId === item.id : editingMiscId === item.id;
+
+                        if (isEditingThis && isExp) {
+                          return (
+                            <tr key={item.id} className="bg-amber-500/5 border border-amber-500/20">
+                              <td className="py-2 px-3">
+                                <input type="date" value={editingExpFields.date} onChange={e => setEditingExpFields(f => ({ ...f, date: e.target.value }))}
+                                  className="w-full bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-mono text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                              </td>
+                              <td className="py-2 px-3">
+                                <input value={editingExpFields.item} onChange={e => setEditingExpFields(f => ({ ...f, item: e.target.value }))}
+                                  placeholder="Item name" className="w-full bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                              </td>
+                              <td className="py-2 px-3">
+                                <span className="px-2.5 py-0.5 rounded-full text-[9px] bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold border border-rose-500/20 uppercase tracking-widest">{item.category}</span>
+                              </td>
+                              <td className="py-2 px-3">
+                                <input value={editingExpFields.supplier} onChange={e => setEditingExpFields(f => ({ ...f, supplier: e.target.value }))}
+                                  placeholder="Supplier" className="w-full bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs text-gray-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                              </td>
+                              <td className="py-2 px-3 text-right">
+                                <div className="flex items-center gap-1 justify-end">
+                                  <span className="text-[10px] text-gray-400 font-mono">{currency}</span>
+                                  <input type="number" min="0" step="0.01" value={editingExpFields.amount} onChange={e => setEditingExpFields(f => ({ ...f, amount: e.target.value }))}
+                                    className="w-24 bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-black text-rose-600 dark:text-rose-400 text-right focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                                </div>
+                              </td>
+                              <td className="py-2 px-3 text-right">
+                                <div className="flex items-center gap-1 justify-end">
+                                  <button onClick={() => handleSaveEditExp(item.id)} className="px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-emerald-500/30 transition border border-emerald-500/30">Save</button>
+                                  <button onClick={handleCancelEditExp} className="px-2 py-1 rounded-lg bg-white/10 text-gray-600 dark:text-zinc-400 text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-white/20 transition">Cancel</button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        if (isEditingThis && !isExp) {
+                          return (
+                            <tr key={item.id} className="bg-amber-500/5 border border-amber-500/20">
+                              <td className="py-2 px-3">
+                                <input type="date" value={editingMiscFields.date} onChange={e => setEditingMiscFields(f => ({ ...f, date: e.target.value }))}
+                                  className="w-full bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-mono text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                              </td>
+                              <td className="py-2 px-3">
+                                <input value={editingMiscFields.item} onChange={e => setEditingMiscFields(f => ({ ...f, item: e.target.value }))}
+                                  placeholder="Item name" className="w-full bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                              </td>
+                              <td className="py-2 px-3">
+                                <span className="px-2.5 py-0.5 rounded-full text-[9px] bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold border border-rose-500/20 uppercase tracking-widest">Miscellaneous</span>
+                              </td>
+                              <td className="py-2 px-3">
+                                <input value={editingMiscFields.description} onChange={e => setEditingMiscFields(f => ({ ...f, description: e.target.value }))}
+                                  placeholder="Description" className="w-full bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs text-gray-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                              </td>
+                              <td className="py-2 px-3 text-right">
+                                <div className="flex items-center gap-1 justify-end">
+                                  <span className="text-[10px] text-gray-400 font-mono">{currency}</span>
+                                  <input type="number" min="0" step="0.01" value={editingMiscFields.amount} onChange={e => setEditingMiscFields(f => ({ ...f, amount: e.target.value }))}
+                                    className="w-24 bg-white/10 dark:bg-zinc-900/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-black text-rose-600 dark:text-rose-400 text-right focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                                </div>
+                              </td>
+                              <td className="py-2 px-3 text-right">
+                                <div className="flex items-center gap-1 justify-end">
+                                  <button onClick={() => handleSaveEditMisc(item.id)} className="px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-emerald-500/30 transition border border-emerald-500/30">Save</button>
+                                  <button onClick={handleCancelEditMisc} className="px-2 py-1 rounded-lg bg-white/10 text-gray-600 dark:text-zinc-400 text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-white/20 transition">Cancel</button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return (
+                          <tr key={item.id} className={`hover:bg-white/5 transition-colors group ${i % 2 === 0 ? "bg-white/2 dark:bg-white/1" : ""}`}>
+                            <td className="py-3 px-4 font-mono text-gray-500 dark:text-zinc-400">{item.date}</td>
+                            <td className="py-3 px-4 font-semibold text-gray-900 dark:text-white">{item.item}</td>
+                            <td className="py-3 px-4">
+                              <span className="px-2.5 py-0.5 rounded-full text-[9px] bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold border border-rose-500/20 uppercase tracking-widest">{item.category}</span>
+                            </td>
+                            <td className="py-3 px-4 text-gray-500 dark:text-zinc-400">{"supplier" in item && item.supplier ? item.supplier : item.description || "—"}</td>
+                            <td className="py-3 px-4 text-right font-black text-rose-600 dark:text-rose-400">{currency} {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                onClick={() => isExp ? handleStartEditExp(item as any) : handleStartEditMisc(item as any)}
+                                title="Edit this record"
+                                className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-500/10 cursor-pointer transition duration-200 opacity-0 group-hover:opacity-100"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      });
                     })()}
                   </tbody>
                 </table>

@@ -679,6 +679,17 @@ export const DBStore = {
     if (exp) { const filtered = expenditures.filter(e => e.id !== id); setStored(KEYS.EXPENDITURES, filtered); this.addAuditLog(user, "Delete", "Expenditures", `Deleted expenditure of GHS ${exp.amount.toFixed(2)}: ${exp.item}.`); }
   },
 
+  updateExpenditure(id: string, changes: Partial<Omit<Expenditure, "id">>, user: string): boolean {
+    const expenditures = this.getExpenditures();
+    const idx = expenditures.findIndex(e => e.id === id);
+    if (idx === -1) return false;
+    const oldAmt = expenditures[idx].amount;
+    expenditures[idx] = { ...expenditures[idx], ...changes };
+    setStored(KEYS.EXPENDITURES, expenditures);
+    this.addAuditLog(user, "Edit", "Expenditures", `Updated expenditure "${expenditures[idx].item}": amount changed from GHS ${oldAmt.toFixed(2)} to GHS ${expenditures[idx].amount.toFixed(2)}.`);
+    return true;
+  },
+
   getDailyMiscellaneous(): DailyMiscellaneous[] { return getStored<DailyMiscellaneous[]>(KEYS.MISCELLANEOUS, SEED_MISC); },
 
   addDailyMiscellaneous(misc: Omit<DailyMiscellaneous, "id">): DailyMiscellaneous {
@@ -699,6 +710,17 @@ export const DBStore = {
       setStored(KEYS.MISCELLANEOUS, filtered);
       this.addAuditLog(user, "Delete", "Daily Misc", `Deleted staff minor expenditure of GHS ${item.amount.toFixed(2)}: ${item.item}.`);
     }
+  },
+
+  updateDailyMiscellaneous(id: string, changes: Partial<Omit<DailyMiscellaneous, "id">>, user: string): boolean {
+    const miscellaneous = this.getDailyMiscellaneous();
+    const idx = miscellaneous.findIndex(m => m.id === id);
+    if (idx === -1) return false;
+    const oldAmt = miscellaneous[idx].amount;
+    miscellaneous[idx] = { ...miscellaneous[idx], ...changes };
+    setStored(KEYS.MISCELLANEOUS, miscellaneous);
+    this.addAuditLog(user, "Edit", "Daily Misc", `Updated misc item "${miscellaneous[idx].item}": amount changed from GHS ${oldAmt.toFixed(2)} to GHS ${miscellaneous[idx].amount.toFixed(2)}.`);
+    return true;
   },
 
   getDailySalesReports(): DailySalesReport[] { return getStored<DailySalesReport[]>(KEYS.SALES_REPORTS, SEED_SALES_REPORTS); },
