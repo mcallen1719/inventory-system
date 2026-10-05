@@ -45,6 +45,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { DBStore, supabaseReady, getSupabaseConnectionStatus } from "./dbStore";
 import { UserRole, CompanySettings, Notification, Job, GeneralPrintingOrder } from "./types";
 import logoUrl from "./assets/images/printopia_logo_1783376948226.jpg";
+import { APP_VERSION } from "./version";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<{ name: string; role: UserRole } | null>(null);
@@ -429,7 +430,7 @@ export default function App() {
             <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center sm:justify-start items-center">
               <span>© {new Date().getFullYear()} {settings.companyName}. All rights reserved.</span>
               <span className="hidden sm:inline text-slate-300 dark:text-zinc-700">|</span>
-              <span>Printopia Operations Terminal v2.0</span>
+              <span>Printopia Operations Terminal {APP_VERSION}</span>
             </div>
             <div className="flex items-center gap-1.5 text-gray-400 dark:text-zinc-600">
               <ShieldCheck className="h-3 w-3" />

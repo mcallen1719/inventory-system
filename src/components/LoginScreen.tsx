@@ -25,6 +25,7 @@ import {
 import { UserRole } from "../types";
 import { DBStore } from "../dbStore";
 import LegalModal from "./LegalModal";
+import { APP_VERSION } from "../version";
 
 interface LoginScreenProps {
   onLogin: (role: UserRole, name: string) => void;
@@ -307,7 +308,7 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
                   <span className="text-[10px] font-mono font-bold tracking-widest text-indigo-400 uppercase">
                     Digital Press
                   </span>
-                  <span className="text-[9px] font-mono text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded">v2.0</span>
+                  <span className="text-[9px] font-mono text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded">{APP_VERSION}</span>
                 </div>
               </div>
             </div>
@@ -381,7 +382,7 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
                     <span className="text-[10px] font-mono font-bold tracking-widest text-indigo-400 uppercase">
                       Digital Press
                     </span>
-                    <span className="text-[9px] font-mono text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded">v2.0</span>
+                    <span className="text-[9px] font-mono text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded">{APP_VERSION}</span>
                   </div>
                 </div>
               </div>
