@@ -255,8 +255,8 @@ export default function App() {
   const currentTabLabel = menuItems.find(item => item.id === activeTabId)?.label || "Terminal";
 
   return (
-    <div className={`${themeClass} min-h-screen flex bg-gradient-to-tr from-slate-100 via-slate-50 to-indigo-100/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 font-sans overflow-x-hidden`}>
-      <aside className={`hidden md:flex md:flex-col ${isSidebarCollapsed ? "w-20" : "w-66"} glass-sidebar text-slate-300 border-r border-indigo-500/10 shrink-0 z-30 relative transition-all duration-300`}>
+    <div className={`${themeClass} min-h-screen min-h-dvh flex bg-gradient-to-tr from-slate-100 via-slate-50 to-indigo-100/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 font-sans overflow-x-hidden`}>
+      <aside className={`hidden md:flex md:flex-col ${isSidebarCollapsed ? "w-20" : "w-66"} glass-sidebar text-slate-300 border-r border-indigo-500/10 shrink-0 z-30 relative transition-all duration-300 min-h-screen min-h-dvh sticky top-0 h-screen`}>
         <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="absolute -right-3 top-7 h-6 w-6 rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 border border-white/15 text-white flex items-center justify-center cursor-pointer shadow-lg hover:shadow-indigo-500/25 z-40 transition-transform active:scale-95 animate-pulse" title={isSidebarCollapsed ? "Expand Menu" : "Collapse Menu"}>
           {isSidebarCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
         </button>
@@ -336,7 +336,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <div className="flex-1 flex flex-col h-screen overflow-y-auto relative z-10 bg-gradient-to-br from-slate-50 via-white to-indigo-50/20 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors duration-300">
+      <div className="flex-1 flex flex-col min-h-screen min-h-dvh overflow-y-auto relative z-10 bg-gradient-to-br from-slate-50 via-white to-indigo-50/20 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors duration-300">
         <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden z-0">
           <div className="absolute top-[-5%] left-[-5%] w-[45%] h-[45%] rounded-full bg-indigo-500/10 dark:bg-indigo-600/6 blur-[120px] animate-pulse" style={{ animationDuration: "12s" }} />
           <div className="absolute top-[25%] right-[-10%] w-[50%] h-[50%] rounded-full bg-violet-400/5 dark:bg-violet-400/3 blur-[140px] animate-pulse" style={{ animationDuration: "15s" }} />
@@ -402,7 +402,7 @@ export default function App() {
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-6 md:px-8 md:py-8 max-w-7xl w-full mx-auto relative z-10">
+        <main className="flex-1 px-4 py-6 md:px-8 md:py-8 w-full max-w-[1440px] xl:max-w-7xl mx-auto relative z-10">
            <AnimatePresence mode="wait">
               {isAdmin ? (
                 activeTabId === "admin-invoices" ? (
