@@ -72,7 +72,23 @@ export default defineConfig(() => {
       }
     },
     build: {
-      outDir: 'dist'
+      outDir: 'dist',
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks(id: string) {
+            if (id.includes('node_modules')) {
+              if (id.includes('recharts') || id.includes('d3-')) return 'vendor-charts';
+              if (id.includes('lucide-react')) return 'vendor-icons';
+              if (id.includes('@supabase')) return 'vendor-supabase';
+              if (id.includes('socket.io')) return 'vendor-socket';
+              if (id.includes('jspdf')) return 'vendor-pdf';
+              if (id.includes('motion') || id.includes('framer-motion')) return 'vendor-motion';
+              return 'vendor';
+            }
+          },
+        },
+      },
     }
   };
 });

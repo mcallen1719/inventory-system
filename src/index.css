@@ -123,15 +123,14 @@ body {
   text-rendering: optimizeLegibility;
   overflow-x: hidden;
   width: 100%;
-  min-height: 100%;
-  min-height: 100dvh;
+  min-height: 100svh;
   margin: 0;
   padding: 0;
 }
 
 #root {
   min-height: 100%;
-  min-height: 100dvh;
+  min-height: 100svh;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -158,9 +157,8 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Responsive media scaling */
-img, svg, video, canvas, audio, iframe, embed, object {
-  display: block;
+/* Responsive media scaling — only limit images, NOT svg/canvas to avoid breaking icons */
+img, video, iframe, embed, object {
   max-width: 100%;
 }
 
