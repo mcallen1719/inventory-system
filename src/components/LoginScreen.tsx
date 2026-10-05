@@ -167,9 +167,10 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
   ];
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center font-sans relative overflow-hidden transition-colors duration-500"
+    <div className="min-h-screen w-full flex items-center justify-center font-sans relative overflow-x-hidden transition-colors duration-500 py-4"
       style={{
-        background: "linear-gradient(135deg, #0F172A 0%, #1E1B4B 35%, #312E81 60%, #1E293B 100%)"
+        background: "linear-gradient(135deg, #0F172A 0%, #1E1B4B 35%, #312E81 60%, #1E293B 100%)",
+        minHeight: "100svh",
       }}
     >
       
@@ -265,9 +266,9 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
         initial={{ opacity: 0, y: 30, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-5xl mx-4 grid grid-cols-1 lg:grid-cols-2 overflow-hidden z-10"
+        className="relative w-full max-w-5xl mx-3 sm:mx-4 my-4 grid grid-cols-1 lg:grid-cols-2 overflow-hidden z-10"
         style={{
-          borderRadius: "28px",
+          borderRadius: "20px",
           background: "rgba(15, 23, 42, 0.6)",
           backdropFilter: "blur(40px) saturate(150%)",
           WebkitBackdropFilter: "blur(40px) saturate(150%)",
@@ -279,7 +280,7 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
         <div className="col-span-2 h-[3px]" style={{ background: "linear-gradient(to right, #6366F1, #8B5CF6, #06B6D4, #6366F1)" }} />
 
         {/* ================= LEFT: BRANDING & FEATURES ================= */}
-        <div className="p-10 sm:p-12 flex flex-col justify-between relative overflow-hidden border-b lg:border-b-0 lg:border-r border-white/[0.06]">
+        <div className="p-6 sm:p-10 lg:p-12 flex flex-col justify-between relative overflow-hidden border-b lg:border-b-0 lg:border-r border-white/[0.06]">
           
           {/* Subtle gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/[0.07] via-transparent to-violet-600/[0.05] pointer-events-none" />
@@ -311,16 +312,16 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
               </div>
             </div>
 
-            <h3 className="text-2xl sm:text-3xl font-extrabold text-white leading-tight tracking-tight mb-3">
+            <h3 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white leading-tight tracking-tight mb-3">
               Welcome back to your <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-cyan-400 bg-clip-text text-transparent">workspace</span>
             </h3>
-            <p className="text-sm text-slate-400 leading-relaxed max-w-sm">
+            <p className="text-sm text-slate-400 leading-relaxed max-w-sm hidden sm:block">
               Access your inventory dashboard, manage print jobs, track materials, and collaborate with your team — all in one place.
             </p>
           </div>
 
-          {/* CENTER: Feature highlights */}
-          <div className="my-8 space-y-4 relative z-10">
+          {/* CENTER: Feature highlights — hidden on mobile to save vertical space */}
+          <div className="my-6 space-y-3 relative z-10 hidden sm:block">
             {[
               { icon: Layers, title: "Smart Inventory", desc: "Real-time SKU tracking & alerts", color: "from-indigo-500 to-blue-500" },
               { icon: Shield, title: "Enterprise Security", desc: "AES-256 encrypted data at rest", color: "from-violet-500 to-purple-500" },
@@ -331,10 +332,10 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.3 + idx * 0.15, duration: 0.5 }}
-                className="flex items-center gap-4 group"
+                className="flex items-center gap-3 group"
               >
-                <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${feature.color} flex items-center justify-center shrink-0 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                  <feature.icon className="h-5 w-5 text-white" />
+                <div className={`h-9 w-9 rounded-xl bg-gradient-to-br ${feature.color} flex items-center justify-center shrink-0 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                  <feature.icon className="h-4 w-4 text-white" />
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-white">{feature.title}</h4>
@@ -344,8 +345,8 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
             ))}
           </div>
 
-          {/* BOTTOM: Trust badges */}
-          <div className="flex items-center gap-4 text-[10px] text-slate-500 font-mono relative z-10 select-none">
+          {/* BOTTOM: Trust badges — hidden on mobile */}
+          <div className="hidden sm:flex items-center gap-3 text-[10px] text-slate-500 font-mono relative z-10 select-none flex-wrap">
             <div className="flex items-center gap-1.5 bg-slate-800/40 px-3 py-1.5 rounded-full border border-slate-700/50">
               <Fingerprint className="h-3 w-3 text-indigo-400" />
               <span>Biometric Ready</span>
@@ -359,7 +360,7 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
         </div>
 
         {/* ================= RIGHT: LOGIN FORM ================= */}
-        <div className="p-10 sm:p-12 flex flex-col justify-center relative">
+        <div className="p-6 sm:p-10 lg:p-12 flex flex-col justify-center relative">
           
           {/* Subtle gradient accent */}
           <div className="absolute inset-0 bg-gradient-to-bl from-indigo-600/[0.04] via-transparent to-transparent pointer-events-none" />
