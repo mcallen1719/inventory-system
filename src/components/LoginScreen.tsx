@@ -167,7 +167,7 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
   ];
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center font-sans relative overflow-x-hidden transition-colors duration-500 py-4"
+    <div className="min-h-screen w-full flex items-center justify-center font-sans relative overflow-x-hidden transition-colors duration-500 py-6 px-3 sm:px-6"
       style={{
         background: "linear-gradient(135deg, #0F172A 0%, #1E1B4B 35%, #312E81 60%, #1E293B 100%)",
         minHeight: "100svh",
@@ -266,7 +266,7 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
         initial={{ opacity: 0, y: 30, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-5xl mx-3 sm:mx-4 my-4 grid grid-cols-1 lg:grid-cols-2 overflow-hidden z-10"
+        className="relative w-full max-w-md lg:max-w-5xl mx-auto my-auto grid grid-cols-1 lg:grid-cols-2 overflow-hidden z-10 shadow-2xl"
         style={{
           borderRadius: "20px",
           background: "rgba(15, 23, 42, 0.6)",
@@ -360,13 +360,31 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
         </div>
 
         {/* ================= RIGHT: LOGIN FORM — full width on mobile ================= */}
-        <div className="p-7 sm:p-10 xl:p-12 flex flex-col justify-center relative">
+        <div className="p-6 sm:p-10 xl:p-12 flex flex-col justify-center relative">
           
           {/* Subtle gradient accent */}
           <div className="absolute inset-0 bg-gradient-to-bl from-indigo-600/[0.04] via-transparent to-transparent pointer-events-none" />
 
           <div className="space-y-6 relative z-10 max-w-sm mx-auto w-full">
             
+            {/* Mobile Brand Header (shows only on screens < lg) */}
+            <div className="flex items-center gap-3.5 pb-1 lg:hidden">
+              <div className="h-12 w-12 rounded-2xl bg-white p-1 shadow-[0_0_20px_rgba(99,102,241,0.25)] border border-white/30 overflow-hidden flex items-center justify-center shrink-0">
+                <img src={logoUrl} alt="Printopia Logo" className="h-full w-full object-contain" referrerPolicy="no-referrer" />
+              </div>
+              <div>
+                <h1 className="text-lg font-black tracking-tight text-white leading-tight">
+                  Printopia
+                </h1>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] font-mono font-bold tracking-widest text-indigo-400 uppercase">
+                    Digital Press
+                  </span>
+                  <span className="text-[9px] font-mono text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded">v2.0</span>
+                </div>
+              </div>
+            </div>
+
             {/* Form Header */}
             <div>
               <h2 className="text-xl font-extrabold text-white flex items-center gap-2 tracking-tight">
@@ -446,7 +464,10 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
                         onFocus={() => setIsEmailFocused(true)}
                         onBlur={() => setIsEmailFocused(false)}
                         placeholder="e.g. admin or staff1"
-                        className="w-full text-sm pl-10 pr-4 py-3.5 text-white bg-transparent outline-none font-medium placeholder-slate-600"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        className="w-full text-base sm:text-sm pl-10 pr-4 py-3.5 text-white bg-transparent outline-none font-medium placeholder-slate-600"
                         disabled={isLoading || isSuccess}
                       />
                       {/* Active underline */}
@@ -490,7 +511,10 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
                         onFocus={() => setIsPasswordFocused(true)}
                         onBlur={() => setIsPasswordFocused(false)}
                         placeholder="••••••••"
-                        className="w-full text-sm pl-10 pr-11 py-3.5 text-white bg-transparent outline-none font-medium placeholder-slate-600"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        className="w-full text-base sm:text-sm pl-10 pr-11 py-3.5 text-white bg-transparent outline-none font-medium placeholder-slate-600"
                         disabled={isLoading || isSuccess}
                       />
                       <button
@@ -592,7 +616,10 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
                         value={emailOrUsername}
                         onChange={(e) => setEmailOrUsername(e.target.value)}
                         placeholder="e.g. admin@printopia.com"
-                        className="w-full text-sm pl-10 pr-4 py-3.5 text-white bg-transparent outline-none font-medium placeholder-slate-600"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        className="w-full text-base sm:text-sm pl-10 pr-4 py-3.5 text-white bg-transparent outline-none font-medium placeholder-slate-600"
                         required
                       />
                     </div>
