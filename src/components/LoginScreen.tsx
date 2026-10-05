@@ -266,7 +266,7 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
         initial={{ opacity: 0, y: 30, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-md lg:max-w-5xl mx-auto my-auto grid grid-cols-1 lg:grid-cols-2 overflow-hidden z-10 shadow-2xl"
+        className="relative w-full max-w-md lg:max-w-5xl mx-auto my-auto flex flex-col lg:flex-row overflow-hidden z-10 shadow-2xl pt-[3px]"
         style={{
           borderRadius: "20px",
           background: "rgba(15, 23, 42, 0.6)",
@@ -277,10 +277,10 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
         }}
       >
         {/* Top accent gradient bar */}
-        <div className="col-span-full h-[3px]" style={{ background: "linear-gradient(to right, #6366F1, #8B5CF6, #06B6D4, #6366F1)" }} />
+        <div className="absolute top-0 left-0 right-0 h-[3px] z-20" style={{ background: "linear-gradient(to right, #6366F1, #8B5CF6, #06B6D4, #6366F1)" }} />
 
         {/* ================= LEFT: BRANDING & FEATURES — desktop only ================= */}
-        <div className="hidden lg:flex p-10 xl:p-12 flex-col justify-between relative overflow-hidden border-r border-white/[0.06]">
+        <div className="hidden lg:flex lg:w-1/2 p-10 xl:p-12 flex-col justify-between relative overflow-hidden border-r border-white/[0.06]">
           
           {/* Subtle gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/[0.07] via-transparent to-violet-600/[0.05] pointer-events-none" />
@@ -359,8 +359,8 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
 
         </div>
 
-        {/* ================= RIGHT: LOGIN FORM — full width on mobile ================= */}
-        <div className="p-6 sm:p-10 xl:p-12 flex flex-col justify-center relative">
+        {/* ================= RIGHT: LOGIN FORM — full width on mobile, half on desktop ================= */}
+        <div className="w-full lg:w-1/2 p-6 sm:p-10 xl:p-12 flex flex-col justify-center relative">
           
           {/* Subtle gradient accent */}
           <div className="absolute inset-0 bg-gradient-to-bl from-indigo-600/[0.04] via-transparent to-transparent pointer-events-none" />
@@ -368,20 +368,27 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
           <div className="space-y-6 relative z-10 max-w-sm mx-auto w-full">
             
             {/* Mobile Brand Header (shows only on screens < lg) */}
-            <div className="flex items-center gap-3.5 pb-1 lg:hidden">
-              <div className="h-12 w-12 rounded-2xl bg-white p-1 shadow-[0_0_20px_rgba(99,102,241,0.25)] border border-white/30 overflow-hidden flex items-center justify-center shrink-0">
-                <img src={logoUrl} alt="Printopia Logo" className="h-full w-full object-contain" referrerPolicy="no-referrer" />
+            <div className="space-y-3 pb-1 lg:hidden">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-xl bg-white p-1 shadow-[0_0_20px_rgba(99,102,241,0.25)] border border-white/30 overflow-hidden flex items-center justify-center shrink-0">
+                  <img src={logoUrl} alt="Printopia Logo" className="h-full w-full object-contain" referrerPolicy="no-referrer" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-black tracking-tight text-white leading-tight">
+                    Printopia
+                  </h1>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[10px] font-mono font-bold tracking-widest text-indigo-400 uppercase">
+                      Digital Press
+                    </span>
+                    <span className="text-[9px] font-mono text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded">v2.0</span>
+                  </div>
+                </div>
               </div>
               <div>
-                <h1 className="text-lg font-black tracking-tight text-white leading-tight">
-                  Printopia
-                </h1>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="text-[10px] font-mono font-bold tracking-widest text-indigo-400 uppercase">
-                    Digital Press
-                  </span>
-                  <span className="text-[9px] font-mono text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded">v2.0</span>
-                </div>
+                <h3 className="text-base font-extrabold text-white leading-tight tracking-tight">
+                  Welcome back to your <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-cyan-400 bg-clip-text text-transparent">workspace</span>
+                </h3>
               </div>
             </div>
 
@@ -657,8 +664,20 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
             </motion.div>
           </div>
 
+          {/* Mobile Trust Badges (Biometric Ready / SOC 2) */}
+          <div className="pt-4 flex items-center justify-center gap-2 text-[10px] text-slate-500 font-mono select-none flex-wrap lg:hidden">
+            <div className="flex items-center gap-1.5 bg-slate-800/40 px-2.5 py-1 rounded-full border border-slate-700/50">
+              <Fingerprint className="h-3 w-3 text-indigo-400" />
+              <span>Biometric Ready</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-slate-800/40 px-2.5 py-1 rounded-full border border-slate-700/50">
+              <Shield className="h-3 w-3 text-emerald-400" />
+              <span>SOC 2 Compliant</span>
+            </div>
+          </div>
+
           {/* BOTTOM FOOTER */}
-          <div className="pt-8 text-[10px] text-slate-500 flex flex-wrap justify-between items-center gap-3 font-medium mt-auto select-none relative z-10 max-w-sm mx-auto w-full">
+          <div className="pt-6 text-[10px] text-slate-500 flex flex-wrap justify-between items-center gap-3 font-medium mt-auto select-none relative z-10 max-w-sm mx-auto w-full">
             <div className="flex gap-3">
               <button 
                 type="button" 
