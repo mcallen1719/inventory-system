@@ -277,10 +277,10 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
         }}
       >
         {/* Top accent gradient bar */}
-        <div className="col-span-2 h-[3px]" style={{ background: "linear-gradient(to right, #6366F1, #8B5CF6, #06B6D4, #6366F1)" }} />
+        <div className="col-span-full h-[3px]" style={{ background: "linear-gradient(to right, #6366F1, #8B5CF6, #06B6D4, #6366F1)" }} />
 
-        {/* ================= LEFT: BRANDING & FEATURES ================= */}
-        <div className="p-6 sm:p-10 lg:p-12 flex flex-col justify-between relative overflow-hidden border-b lg:border-b-0 lg:border-r border-white/[0.06]">
+        {/* ================= LEFT: BRANDING & FEATURES — desktop only ================= */}
+        <div className="hidden lg:flex p-10 xl:p-12 flex-col justify-between relative overflow-hidden border-r border-white/[0.06]">
           
           {/* Subtle gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/[0.07] via-transparent to-violet-600/[0.05] pointer-events-none" />
@@ -345,8 +345,8 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
             ))}
           </div>
 
-          {/* BOTTOM: Trust badges — hidden on mobile */}
-          <div className="hidden sm:flex items-center gap-3 text-[10px] text-slate-500 font-mono relative z-10 select-none flex-wrap">
+          {/* BOTTOM: Trust badges */}
+          <div className="flex items-center gap-3 text-[10px] text-slate-500 font-mono relative z-10 select-none flex-wrap">
             <div className="flex items-center gap-1.5 bg-slate-800/40 px-3 py-1.5 rounded-full border border-slate-700/50">
               <Fingerprint className="h-3 w-3 text-indigo-400" />
               <span>Biometric Ready</span>
@@ -359,8 +359,8 @@ export default function LoginScreen({ onLogin, isDarkMode }: LoginScreenProps) {
 
         </div>
 
-        {/* ================= RIGHT: LOGIN FORM ================= */}
-        <div className="p-6 sm:p-10 lg:p-12 flex flex-col justify-center relative">
+        {/* ================= RIGHT: LOGIN FORM — full width on mobile ================= */}
+        <div className="p-7 sm:p-10 xl:p-12 flex flex-col justify-center relative">
           
           {/* Subtle gradient accent */}
           <div className="absolute inset-0 bg-gradient-to-bl from-indigo-600/[0.04] via-transparent to-transparent pointer-events-none" />
